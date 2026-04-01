@@ -18,6 +18,7 @@ export interface Article {
   summary: string | null;
   curated_at: string | null;
   read_at: string | null;
+  tags: string | null;
 }
 
 export interface RssItem {

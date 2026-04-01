@@ -25,12 +25,24 @@ export function listArticles(uncuratedOnly: boolean = false): Article[] {
 export function updateArticleCuration(
   id: number,
   score: number,
-  summary: string
+  summary: string,
+  tags?: string
 ): void {
-  db.run(
-    "UPDATE articles SET score = ?, summary = ?, curated_at = datetime('now') WHERE id = ?",
-    [score, summary, id]
-  );
+  if (tags !== undefined) {
+    db.run(
+      "UPDATE articles SET score = ?, summary = ?, tags = ?, curated_at = datetime('now') WHERE id = ?",
+      [score, summary, tags, id]
+    );
+  } else {
+    db.run(
+      "UPDATE articles SET score = ?, summary = ?, curated_at = datetime('now') WHERE id = ?",
+      [score, summary, id]
+    );
+  }
+}
+
+export function updateArticleTags(id: number, tags: string): void {
+  db.run("UPDATE articles SET tags = ? WHERE id = ?", [tags, id]);
 }
 
 export function getArticleById(id: number): Article | null {

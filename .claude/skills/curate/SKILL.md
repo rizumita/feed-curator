@@ -1,11 +1,11 @@
 ---
 name: curate
-description: AI-curate uncurated articles by reading their content, scoring relevance (0.0-1.0), writing summaries, and generating a Markdown digest. Use when asked to "curate", "summarize articles", "generate digest", or "score articles".
+description: AI-curate uncurated articles by reading their content, scoring relevance (0.0-1.0), writing summaries, assigning tags, and generating a Markdown digest. Use when asked to "curate", "summarize articles", "generate digest", or "score articles".
 ---
 
 # Curate Articles
 
-Read uncurated articles, score their relevance, write summaries, and generate a Markdown digest.
+Read uncurated articles, score their relevance, write summaries, assign tags, and generate a Markdown digest.
 
 ## Steps
 
@@ -14,7 +14,8 @@ Read uncurated articles, score their relevance, write summaries, and generate a 
 3. For each article, evaluate its title and content to determine:
    - **Score** (0.0-1.0): Based on novelty, technical depth, practical utility, and breadth of interest
    - **Summary** (2-3 sentences): Capture the key insight of the article. **Write the summary in the user's configured language.**
-4. Run `bun src/cli.ts update <id> --score <score> --summary "<summary>"` for each article
+   - **Tags** (comma-separated): Assign 1-3 short topic tags in English (e.g. `agents,mcp,security`). Use consistent, reusable tag names across articles.
+4. Run `bun src/cli.ts update <id> --score <score> --summary "<summary>" --tags "<tags>"` for each article
 5. After all articles are updated, generate a Markdown digest file at `output/digest-YYYY-MM-DD.md` sorted by score descending. **Write the digest headings and summaries in the user's configured language.** Use this format:
 
 ```markdown
@@ -24,6 +25,7 @@ Read uncurated articles, score their relevance, write summaries, and generate a 
 
 ### 1. Article Title (Score: 0.95)
 **Source:** https://example.com/article
+**Tags:** agents, mcp
 **Summary:** Summary in the user's preferred language...
 
 ---
@@ -33,3 +35,17 @@ Read uncurated articles, score their relevance, write summaries, and generate a 
 
 6. Create the `output/` directory if it doesn't exist before writing the file
 7. Report the results to the user
+
+## Common Tags
+
+Use these tags when applicable (add new ones as needed):
+- `agents` — AI agent development, agent frameworks
+- `coding` — AI-assisted coding, vibe coding
+- `llm` — LLM releases, capabilities, benchmarks
+- `mcp` — Model Context Protocol
+- `security` — Security vulnerabilities, supply chain attacks
+- `tools` — Developer tools, IDE integrations
+- `rag` — Retrieval-augmented generation
+- `local-models` — Local/on-device LLM deployment
+- `enterprise` — Enterprise AI adoption, case studies
+- `research` — AI research papers, techniques

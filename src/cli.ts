@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { db } from "./db";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle } from "./feed";
-import { addArticle, listArticles, updateArticleCuration, markAsRead, markAsUnread } from "./article";
+import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread } from "./article";
 import { parseFeed } from "./rss";
 import { startServer } from "./server";
 
@@ -147,9 +147,21 @@ program
   .argument("<id>", "Article ID")
   .requiredOption("--score <score>", "Relevance score (0.0-1.0)")
   .requiredOption("--summary <summary>", "Article summary")
-  .action((id: string, opts: { score: string; summary: string }) => {
-    updateArticleCuration(Number(id), Number(opts.score), opts.summary);
+  .option("--tags <tags>", "Comma-separated tags")
+  .action((id: string, opts: { score: string; summary: string; tags?: string }) => {
+    updateArticleCuration(Number(id), Number(opts.score), opts.summary, opts.tags);
     console.log(`Updated article ${id}.`);
+  });
+
+// feed tag <id> <tags>
+program
+  .command("tag")
+  .description("Set tags on an article")
+  .argument("<id>", "Article ID")
+  .argument("<tags>", "Comma-separated tags")
+  .action((id: string, tags: string) => {
+    updateArticleTags(Number(id), tags);
+    console.log(`Tagged article ${id}: ${tags}`);
   });
 
 // feed read <id...>

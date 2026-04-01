@@ -44,9 +44,11 @@ db.run(`
   )
 `);
 
-// Migration: add read_at column if missing
-try {
-  db.run("ALTER TABLE articles ADD COLUMN read_at TEXT");
-} catch {
-  // column already exists
+// Migrations
+for (const col of ["read_at TEXT", "tags TEXT"]) {
+  try {
+    db.run(`ALTER TABLE articles ADD COLUMN ${col}`);
+  } catch {
+    // column already exists
+  }
 }

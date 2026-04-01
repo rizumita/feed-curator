@@ -3,16 +3,30 @@ import type { Article, Feed } from "./types";
 
 type ArticleWithFeed = Article & { feed_title: string | null };
 
-function getCuratedArticles(): ArticleWithFeed[] {
+function getCuratedArticles(sort: "newest" | "score" = "newest"): ArticleWithFeed[] {
+  const order = sort === "score" ? "a.score DESC" : "a.published_at DESC, a.fetched_at DESC";
   return db
     .query(
       `SELECT a.*, f.title as feed_title
        FROM articles a
        LEFT JOIN feeds f ON a.feed_id = f.id
        WHERE a.curated_at IS NOT NULL
-       ORDER BY a.score DESC`
+       ORDER BY ${order}`
     )
     .all() as ArticleWithFeed[];
+}
+
+function getAllTags(articles: ArticleWithFeed[]): string[] {
+  const tagSet = new Set<string>();
+  for (const a of articles) {
+    if (a.tags) {
+      for (const t of a.tags.split(",")) {
+        const trimmed = t.trim();
+        if (trimmed) tagSet.add(trimmed);
+      }
+    }
+  }
+  return [...tagSet].sort();
 }
 
 function getFeeds(): Feed[] {
@@ -88,9 +102,11 @@ function renderCard(a: ArticleWithFeed): string {
   const published = formatDate(a.published_at);
   const isRead = a.read_at !== null;
   const pct = Math.round(score * 100);
+  const tags = a.tags ? a.tags.split(",").map((t: string) => t.trim()).filter(Boolean) : [];
+  const tagsHtml = tags.map((t: string) => `<span class="tag" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
 
   return `
-    <article class="card${isRead ? " read" : ""}" data-id="${a.id}" data-tier="${tier.id}">
+    <article class="card${isRead ? " read" : ""}" data-id="${a.id}" data-tier="${tier.id}" data-tags="${escapeHtml(tags.join(","))}">
       <div class="card-row">
         <button class="read-btn${isRead ? " is-read" : ""}" onclick="toggleRead(${a.id})" title="${isRead ? "Mark unread" : "Mark read"}">
           ${isRead ? "✓" : ""}
@@ -103,6 +119,7 @@ function renderCard(a: ArticleWithFeed): string {
           <div class="card-meta">
             <span class="feed-name">${feedName}</span>
             ${published ? `<span class="sep">&middot;</span><span class="date">${published}</span>` : ""}
+            ${tagsHtml ? `<span class="sep">&middot;</span>${tagsHtml}` : ""}
           </div>
         </div>
         <div class="card-score">
@@ -114,7 +131,7 @@ function renderCard(a: ArticleWithFeed): string {
     </article>`;
 }
 
-function renderPage(articles: ArticleWithFeed[]): string {
+function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "newest"): string {
   const stats = getStats();
   const now = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -137,6 +154,8 @@ function renderPage(articles: ArticleWithFeed[]): string {
     const items = articles.filter((a) => getTier(a.score ?? 0).id === tier.id);
     return { tier, articles: items };
   }).filter((g) => g.articles.length > 0);
+
+  const allTags = getAllTags(articles);
 
   const tocLinks = sections
     .map((s) => `<a href="#${s.tier.id}" class="toc-link" style="--tc:${s.tier.color}"><span class="toc-dot" style="background:${s.tier.color}"></span>${s.tier.label}<span class="toc-count">${s.articles.length}</span></a>`)
@@ -446,6 +465,36 @@ function renderPage(articles: ArticleWithFeed[]): string {
 
     .sep { color: var(--border-light); }
 
+    .tag {
+      display: inline-block;
+      font-size: 0.6875rem;
+      padding: 0.0625rem 0.4rem;
+      border-radius: 4px;
+      background: rgba(167, 139, 250, 0.12);
+      color: var(--accent);
+      margin-right: 0.25rem;
+    }
+
+    .tag-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+
+    .tag-filter {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .tag-filter:hover { border-color: var(--accent); color: var(--accent); }
+    .tag-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
     /* --- Score Ring --- */
     .card-score {
       flex-shrink: 0;
@@ -547,13 +596,30 @@ function renderPage(articles: ArticleWithFeed[]): string {
       </div>
 
       <div class="sidebar-section">
-        <div class="sidebar-heading">Filter</div>
+        <div class="sidebar-heading">Sort</div>
         <div class="filter-list">
+          <button class="filter-btn${sort === "newest" ? " active" : ""}" onclick="location.href='/?sort=newest'">Newest first</button>
+          <button class="filter-btn${sort === "score" ? " active" : ""}" onclick="location.href='/?sort=score'">Score first</button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Filter</div>
+        <div class="filter-list" id="read-filters">
           <button class="filter-btn active" onclick="filterArticles('all', this)">All</button>
           <button class="filter-btn" onclick="filterArticles('unread', this)">Unread only</button>
           <button class="filter-btn" onclick="filterArticles('read', this)">Read only</button>
         </div>
       </div>
+
+      ${allTags.length > 0 ? `
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Tags</div>
+        <div class="tag-filters">
+          <button class="tag-filter active" onclick="filterByTag('all', this)">All</button>
+          ${allTags.map(t => `<button class="tag-filter" onclick="filterByTag('${escapeHtml(t)}', this)">${escapeHtml(t)}</button>`).join("\n")}
+        </div>
+      </div>` : ""}
 
       <div class="sidebar-section toc">
         <div class="sidebar-heading">Sections</div>
@@ -606,21 +672,39 @@ function renderPage(articles: ArticleWithFeed[]): string {
       document.getElementById('unread-count').textContent = unread;
     }
 
-    function filterArticles(mode, el) {
-      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
+    let currentTagFilter = 'all';
+    let currentReadFilter = 'all';
+
+    function applyFilters() {
       document.querySelectorAll('.card').forEach(card => {
         const isRead = card.classList.contains('read');
-        if (mode === 'all') card.style.display = '';
-        else if (mode === 'unread') card.style.display = isRead ? 'none' : '';
-        else if (mode === 'read') card.style.display = isRead ? '' : 'none';
+        const tags = (card.dataset.tags || '').split(',').map(t => t.trim());
+        let show = true;
+        if (currentReadFilter === 'unread' && isRead) show = false;
+        if (currentReadFilter === 'read' && !isRead) show = false;
+        if (currentTagFilter !== 'all' && !tags.includes(currentTagFilter)) show = false;
+        card.style.display = show ? '' : 'none';
       });
-      // Hide empty sections
       document.querySelectorAll('.tier-section').forEach(sec => {
         const visible = sec.querySelectorAll('.card:not([style*="display: none"])').length;
         sec.style.display = visible ? '' : 'none';
       });
     }
+
+    function filterArticles(mode, el) {
+      document.querySelectorAll('#read-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      currentReadFilter = mode;
+      applyFilters();
+    }
+
+    function filterByTag(tag, el) {
+      document.querySelectorAll('.tag-filter').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      currentTagFilter = tag;
+      applyFilters();
+    }
+
   </script>
 </body>
 </html>`;
@@ -647,7 +731,8 @@ export function startServer(port: number = 3000) {
       }
 
       if (url.pathname === "/") {
-        return new Response(renderPage(getCuratedArticles()), {
+        const sort = url.searchParams.get("sort") === "score" ? "score" : "newest";
+        return new Response(renderPage(getCuratedArticles(sort), sort), {
           headers: { "Content-Type": "text/html; charset=utf-8" },
         });
       }

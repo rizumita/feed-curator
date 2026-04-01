@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle } from "./feed";
 import { addArticle, listArticles, updateArticleCuration } from "./article";
 import { parseFeed } from "./rss";
+import { startServer } from "./server";
 
 const program = new Command();
 program.name("feed").description("RSS Feed Curator CLI");
@@ -143,6 +144,15 @@ program
   .action((id: string, opts: { score: string; summary: string }) => {
     updateArticleCuration(Number(id), Number(opts.score), opts.summary);
     console.log(`Updated article ${id}.`);
+  });
+
+// feed serve
+program
+  .command("serve")
+  .description("Start web UI server")
+  .option("-p, --port <port>", "Port number", "3000")
+  .action((opts: { port: string }) => {
+    startServer(Number(opts.port));
   });
 
 program.parse();

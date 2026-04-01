@@ -16,6 +16,7 @@ bun src/cli.ts fetch                  # Fetch articles from all feeds
 bun src/cli.ts add-article <url>      # Add single article URL
 bun src/cli.ts articles [--uncurated] [--json]  # List articles
 bun src/cli.ts update <id> --score <n> --summary "..."  # Update curation
+bun src/cli.ts serve [--port 3000]    # Start web UI server
 ```
 
 ## Data

@@ -704,25 +704,25 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       <div class="sidebar-section">
         <div class="sidebar-heading">Category</div>
         <div class="filter-list" id="category-filters">
-          <button class="filter-btn active" onclick="filterByCategory('all', this)">All</button>
-          ${allCategories.map(c => `<button class="filter-btn" onclick="filterByCategory('${escapeHtml(c)}', this)">${escapeHtml(c)}</button>`).join("\n")}
+          <button class="filter-btn active" data-value="all" onclick="filterByCategory('all')">All</button>
+          ${allCategories.map(c => `<button class="filter-btn" data-value="${escapeHtml(c)}" onclick="filterByCategory('${escapeHtml(c)}')">${escapeHtml(c)}</button>`).join("\n")}
         </div>
       </div>` : ""}
 
       <div class="sidebar-section">
         <div class="sidebar-heading">Sort</div>
         <div class="filter-list">
-          <button class="filter-btn${sort === "newest" ? " active" : ""}" onclick="location.href='/?sort=newest'">Newest first</button>
-          <button class="filter-btn${sort === "score" ? " active" : ""}" onclick="location.href='/?sort=score'">Score first</button>
+          <button class="filter-btn${sort === "newest" ? " active" : ""}" onclick="setSort('newest')">Newest first</button>
+          <button class="filter-btn${sort === "score" ? " active" : ""}" onclick="setSort('score')">Score first</button>
         </div>
       </div>
 
       <div class="sidebar-section">
         <div class="sidebar-heading">Filter</div>
         <div class="filter-list" id="read-filters">
-          <button class="filter-btn active" onclick="filterArticles('all', this)">All</button>
-          <button class="filter-btn" onclick="filterArticles('unread', this)">Unread only</button>
-          <button class="filter-btn" onclick="filterArticles('read', this)">Read only</button>
+          <button class="filter-btn active" data-value="all" onclick="filterArticles('all')">All</button>
+          <button class="filter-btn" data-value="unread" onclick="filterArticles('unread')">Unread only</button>
+          <button class="filter-btn" data-value="read" onclick="filterArticles('read')">Read only</button>
         </div>
       </div>
 
@@ -730,8 +730,8 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       <div class="sidebar-section">
         <div class="sidebar-heading">Tags</div>
         <div class="tag-filters">
-          <button class="tag-filter active" onclick="filterByTag('all', this)">All</button>
-          ${allTags.map(t => `<button class="tag-filter" onclick="filterByTag('${escapeHtml(t)}', this)">${escapeHtml(t)}</button>`).join("\n")}
+          <button class="tag-filter active" data-value="all" onclick="filterByTag('all')">All</button>
+          ${allTags.map(t => `<button class="tag-filter" data-value="${escapeHtml(t)}" onclick="filterByTag('${escapeHtml(t)}')">${escapeHtml(t)}</button>`).join("\n")}
         </div>
       </div>` : ""}
 
@@ -811,9 +811,20 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
     // Apply saved theme on load
     applyTheme(getPreferredTheme());
 
-    let currentTagFilter = 'all';
-    let currentReadFilter = 'all';
-    let currentCategoryFilter = 'all';
+    // --- Filter state from URL params ---
+    const params = new URLSearchParams(location.search);
+    let currentReadFilter = params.get('read') || 'all';
+    let currentTagFilter = params.get('tag') || 'all';
+    let currentCategoryFilter = params.get('category') || 'all';
+
+    function updateURL() {
+      const p = new URLSearchParams(location.search);
+      currentReadFilter === 'all' ? p.delete('read') : p.set('read', currentReadFilter);
+      currentTagFilter === 'all' ? p.delete('tag') : p.set('tag', currentTagFilter);
+      currentCategoryFilter === 'all' ? p.delete('category') : p.set('category', currentCategoryFilter);
+      const qs = p.toString();
+      history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+    }
 
     function applyFilters() {
       document.querySelectorAll('.card').forEach(card => {
@@ -831,19 +842,32 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
         const visible = sec.querySelectorAll('.card:not([style*="display: none"])').length;
         sec.style.display = visible ? '' : 'none';
       });
+      updateURL();
     }
 
-    function filterArticles(mode, el) {
-      document.querySelectorAll('#read-filters .filter-btn').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
+    function setActiveBtn(container, value) {
+      document.querySelectorAll(container + ' .filter-btn').forEach(b => {
+        b.classList.toggle('active', (b.dataset.value || 'all') === value);
+      });
+    }
+
+    function filterArticles(mode) {
       currentReadFilter = mode;
+      setActiveBtn('#read-filters', mode);
       applyFilters();
     }
 
-    function filterByTag(tag, el) {
-      document.querySelectorAll('.tag-filter').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
+    function filterByTag(tag) {
       currentTagFilter = tag;
+      document.querySelectorAll('.tag-filter').forEach(b => {
+        b.classList.toggle('active', (b.dataset.value || 'all') === tag);
+      });
+      applyFilters();
+    }
+
+    function filterByCategory(cat) {
+      currentCategoryFilter = cat;
+      setActiveBtn('#category-filters', cat);
       applyFilters();
     }
 
@@ -867,12 +891,24 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       updateUnreadCount();
     }
 
-    function filterByCategory(cat, el) {
-      document.querySelectorAll('#category-filters .filter-btn').forEach(b => b.classList.remove('active'));
-      el.classList.add('active');
-      currentCategoryFilter = cat;
-      applyFilters();
+    function setSort(sort) {
+      const p = new URLSearchParams(location.search);
+      sort === 'newest' ? p.delete('sort') : p.set('sort', sort);
+      // Preserve other params
+      if (currentReadFilter !== 'all') p.set('read', currentReadFilter);
+      if (currentTagFilter !== 'all') p.set('tag', currentTagFilter);
+      if (currentCategoryFilter !== 'all') p.set('category', currentCategoryFilter);
+      const qs = p.toString();
+      location.href = qs ? '?' + qs : '/';
     }
+
+    // Restore filters on load
+    setActiveBtn('#read-filters', currentReadFilter);
+    setActiveBtn('#category-filters', currentCategoryFilter);
+    document.querySelectorAll('.tag-filter').forEach(b => {
+      b.classList.toggle('active', (b.dataset.value || 'all') === currentTagFilter);
+    });
+    applyFilters();
 
   </script>
 </body>

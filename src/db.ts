@@ -44,6 +44,12 @@ db.run(`
   )
 `);
 
+// Indexes
+db.run("CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)");
+db.run("CREATE INDEX IF NOT EXISTS idx_articles_curated_at ON articles(curated_at)");
+db.run("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at)");
+db.run("CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score)");
+
 // Migrations
 for (const [table, col] of [
   ["articles", "read_at TEXT"],

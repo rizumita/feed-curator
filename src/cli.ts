@@ -4,6 +4,7 @@ import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle, 
 import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread } from "./article";
 import { parseFeed } from "./rss";
 import { startServer } from "./server";
+import { generateProfile, formatProfile, profileForPrompt } from "./profile";
 
 const program = new Command();
 program.name("feed").description("RSS Feed Curator CLI");
@@ -199,6 +200,20 @@ program
   .action((id: string, category: string) => {
     updateFeedCategory(Number(id), category);
     console.log(`Feed ${id} categorized as: ${category}`);
+  });
+
+// feed profile
+program
+  .command("profile")
+  .description("Show reading profile based on read history")
+  .option("--prompt", "Output as prompt for AI curation")
+  .action((opts: { prompt?: boolean }) => {
+    const profile = generateProfile();
+    if (opts.prompt) {
+      console.log(profileForPrompt(profile));
+    } else {
+      console.log(formatProfile(profile));
+    }
   });
 
 // feed config

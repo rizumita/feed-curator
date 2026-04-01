@@ -20,6 +20,7 @@ bun src/cli.ts tag <id> <tags>        # Set tags on an article
 bun src/cli.ts read <id...>           # Mark articles as read
 bun src/cli.ts unread <id...>         # Mark articles as unread
 bun src/cli.ts categorize <id> <cat>  # Set feed category
+bun src/cli.ts profile [--prompt]     # Show reading profile (--prompt for AI use)
 bun src/cli.ts serve [--port 3000]    # Start web UI server
 bun src/cli.ts config <key> [value]   # Get/set config (e.g. language)
 ```

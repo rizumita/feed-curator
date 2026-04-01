@@ -178,6 +178,7 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
           <span class="tier-bar" style="background:${s.tier.color}"></span>
           <h2>${s.tier.label}</h2>
           <span class="tier-count">${s.articles.length}</span>
+          <button class="mark-section-read" onclick="markSectionRead(this)" title="Mark all visible as read">Mark all read</button>
         </div>
         ${s.articles.map(renderCard).join("\n")}
       </section>`
@@ -420,6 +421,23 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       background: var(--surface);
       padding: 0.125rem 0.5rem;
       border-radius: 999px;
+    }
+
+    .mark-section-read {
+      margin-left: auto;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.25rem 0.625rem;
+      color: var(--text-dim);
+      font-size: 0.6875rem;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .mark-section-read:hover {
+      border-color: var(--accent-light);
+      color: var(--accent-light);
     }
 
     /* --- Cards --- */
@@ -829,6 +847,26 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       applyFilters();
     }
 
+    async function markSectionRead(btn) {
+      const section = btn.closest('.tier-section');
+      const cards = section.querySelectorAll('.card:not(.read):not([style*="display: none"])');
+      const ids = [...cards].map(c => Number(c.dataset.id));
+      if (ids.length === 0) return;
+      await fetch('/api/read-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      cards.forEach(card => {
+        card.classList.add('read');
+        const rb = card.querySelector('.read-btn');
+        rb.classList.add('is-read');
+        rb.textContent = '\u2713';
+        rb.title = 'Mark unread';
+      });
+      updateUnreadCount();
+    }
+
     function filterByCategory(cat, el) {
       document.querySelectorAll('#category-filters .filter-btn').forEach(b => b.classList.remove('active'));
       el.classList.add('active');
@@ -844,7 +882,7 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
 export function startServer(port: number = 3000) {
   const server = Bun.serve({
     port,
-    fetch(req) {
+    async fetch(req) {
       const url = new URL(req.url);
 
       if (url.pathname === "/api/articles") {
@@ -859,6 +897,14 @@ export function startServer(port: number = 3000) {
       if (readMatch && req.method === "POST") {
         toggleRead(Number(readMatch[1]));
         return Response.json({ ok: true });
+      }
+
+      if (url.pathname === "/api/read-batch" && req.method === "POST") {
+        const { ids } = await req.json() as { ids: number[] };
+        for (const id of ids) {
+          db.run("UPDATE articles SET read_at = datetime('now') WHERE id = ? AND read_at IS NULL", [id]);
+        }
+        return Response.json({ ok: true, count: ids.length });
       }
 
       if (url.pathname === "/") {

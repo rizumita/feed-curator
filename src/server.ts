@@ -842,6 +842,25 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
         const visible = sec.querySelectorAll('.card:not([style*="display: none"])').length;
         sec.style.display = visible ? '' : 'none';
       });
+      // Update visible tags based on category
+      const visibleTags = new Set();
+      document.querySelectorAll('.card').forEach(card => {
+        const cat = card.dataset.category || '';
+        if (currentCategoryFilter !== 'all' && cat !== currentCategoryFilter) return;
+        (card.dataset.tags || '').split(',').forEach(t => { const tr = t.trim(); if (tr) visibleTags.add(tr); });
+      });
+      document.querySelectorAll('.tag-filter:not([data-value="all"])').forEach(btn => {
+        btn.style.display = visibleTags.has(btn.dataset.value) ? '' : 'none';
+      });
+      // Reset tag filter if current tag not in visible set
+      if (currentTagFilter !== 'all' && !visibleTags.has(currentTagFilter)) {
+        currentTagFilter = 'all';
+        document.querySelectorAll('.tag-filter').forEach(b => {
+          b.classList.toggle('active', (b.dataset.value || 'all') === 'all');
+        });
+        applyFilters();
+        return;
+      }
       updateURL();
     }
 

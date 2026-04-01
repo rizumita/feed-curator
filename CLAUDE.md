@@ -5,7 +5,7 @@ AI-powered RSS feed curation tool. Claude Code acts as the AI curator — no API
 ## Architecture
 
 - **CLI tool** (`bun src/cli.ts`): Data management (feeds, articles, SQLite)
-- **Claude Code skills**: AI-driven curation (`/curate`, `/fetch-feeds`)
+- **Claude Code skills**: AI-driven curation (`/curate`, `/fetch-feeds`, `/discover-feeds`)
 
 ## CLI Commands
 

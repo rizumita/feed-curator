@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { db } from "./db";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle } from "./feed";
 import { addArticle, listArticles, updateArticleCuration } from "./article";
 import { parseFeed } from "./rss";
@@ -144,6 +145,28 @@ program
   .action((id: string, opts: { score: string; summary: string }) => {
     updateArticleCuration(Number(id), Number(opts.score), opts.summary);
     console.log(`Updated article ${id}.`);
+  });
+
+// feed config
+program
+  .command("config")
+  .description("Get or set configuration")
+  .argument("<key>", "Config key (e.g. language)")
+  .argument("[value]", "Config value to set")
+  .action((key: string, value?: string) => {
+    if (value !== undefined) {
+      db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value]);
+      console.log(`Set ${key} = ${value}`);
+    } else {
+      const row = db.query("SELECT value FROM settings WHERE key = ?").get(key) as
+        | { value: string }
+        | null;
+      if (row) {
+        console.log(row.value);
+      } else {
+        console.log(`(not set)`);
+      }
+    }
   });
 
 // feed serve

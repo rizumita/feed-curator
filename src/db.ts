@@ -21,6 +21,13 @@ db.run(`
 `);
 
 db.run(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  )
+`);
+
+db.run(`
   CREATE TABLE IF NOT EXISTS articles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     feed_id INTEGER,

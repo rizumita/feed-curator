@@ -38,3 +38,11 @@ export function getArticleById(id: number): Article | null {
     (db.query("SELECT * FROM articles WHERE id = ?").get(id) as Article) ?? null
   );
 }
+
+export function markAsRead(id: number): void {
+  db.run("UPDATE articles SET read_at = datetime('now') WHERE id = ?", [id]);
+}
+
+export function markAsUnread(id: number): void {
+  db.run("UPDATE articles SET read_at = NULL WHERE id = ?", [id]);
+}

@@ -22,8 +22,22 @@ function getStats() {
   const curated = (
     db.query("SELECT COUNT(*) as n FROM articles WHERE curated_at IS NOT NULL").get() as any
   ).n;
+  const unread = (
+    db.query("SELECT COUNT(*) as n FROM articles WHERE curated_at IS NOT NULL AND read_at IS NULL").get() as any
+  ).n;
   const feeds = (db.query("SELECT COUNT(*) as n FROM feeds").get() as any).n;
-  return { total, curated, feeds };
+  return { total, curated, unread, feeds };
+}
+
+function toggleRead(id: number): boolean {
+  const article = db.query("SELECT read_at FROM articles WHERE id = ?").get(id) as { read_at: string | null } | null;
+  if (!article) return false;
+  if (article.read_at) {
+    db.run("UPDATE articles SET read_at = NULL WHERE id = ?", [id]);
+  } else {
+    db.run("UPDATE articles SET read_at = datetime('now') WHERE id = ?", [id]);
+  }
+  return true;
 }
 
 function scoreColor(score: number): string {
@@ -76,16 +90,20 @@ function renderPage(articles: (Article & { feed_title: string | null })[]): stri
       const summary = escapeHtml(a.summary ?? "");
       const feedName = escapeHtml(a.feed_title ?? "Unknown");
       const published = formatDate(a.published_at);
+      const isRead = a.read_at !== null;
 
       return `
-      <article class="card">
+      <article class="card${isRead ? " read" : ""}" data-id="${a.id}">
         <div class="card-header">
           <span class="rank">#${i + 1}</span>
           <span class="badge" style="background:${color}">${label}</span>
+          <button class="read-btn${isRead ? " is-read" : ""}" onclick="toggleRead(${a.id})" title="${isRead ? "Mark unread" : "Mark read"}">
+            ${isRead ? "✓" : "○"}
+          </button>
           <span class="score">${score.toFixed(2)}</span>
         </div>
         <h2 class="card-title">
-          <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${title}</a>
+          <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" onclick="markRead(${a.id})">${title}</a>
         </h2>
         <p class="card-summary">${summary}</p>
         <div class="card-meta">
@@ -289,6 +307,69 @@ function renderPage(articles: (Article & { feed_title: string | null })[]): stri
       font-size: 0.75rem;
     }
 
+    .card.read {
+      opacity: 0.55;
+    }
+
+    .card.read:hover {
+      opacity: 0.85;
+    }
+
+    .read-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      width: 1.5rem;
+      height: 1.5rem;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      padding: 0;
+    }
+
+    .read-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .read-btn.is-read {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .filters {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .filter-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.375rem 0.75rem;
+      color: var(--text-dim);
+      font-size: 0.8125rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .filter-btn:hover {
+      border-color: var(--text-muted);
+      color: var(--text-muted);
+    }
+
+    .filter-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
     @media (max-width: 640px) {
       header { padding: 2rem 0 1.5rem; }
       .card { padding: 1.25rem; }
@@ -303,17 +384,22 @@ function renderPage(articles: (Article & { feed_title: string | null })[]): stri
       <p class="subtitle">${now}</p>
       <div class="stats">
         <div class="stat">
-          <span class="stat-value">${stats.curated}</span>
-          <span class="stat-label">Curated</span>
+          <span class="stat-value">${stats.unread}</span>
+          <span class="stat-label">Unread</span>
         </div>
         <div class="stat">
-          <span class="stat-value">${stats.total - stats.curated}</span>
-          <span class="stat-label">Pending</span>
+          <span class="stat-value">${stats.curated}</span>
+          <span class="stat-label">Curated</span>
         </div>
         <div class="stat">
           <span class="stat-value">${stats.feeds}</span>
           <span class="stat-label">Feeds</span>
         </div>
+      </div>
+      <div class="filters">
+        <button class="filter-btn active" onclick="filterArticles('all')">All</button>
+        <button class="filter-btn" onclick="filterArticles('unread')">Unread</button>
+        <button class="filter-btn" onclick="filterArticles('read')">Read</button>
       </div>
     </header>
 
@@ -331,6 +417,45 @@ function renderPage(articles: (Article & { feed_title: string | null })[]): stri
     <footer>
       Feed Curator &mdash; AI-powered curation by Claude Code
     </footer>
+    <script>
+      async function toggleRead(id) {
+        await fetch('/api/read/' + id, { method: 'POST' });
+        const card = document.querySelector('[data-id="' + id + '"]');
+        const btn = card.querySelector('.read-btn');
+        const isRead = card.classList.toggle('read');
+        btn.classList.toggle('is-read');
+        btn.textContent = isRead ? '✓' : '○';
+        btn.title = isRead ? 'Mark unread' : 'Mark read';
+        updateUnreadCount();
+      }
+      async function markRead(id) {
+        const card = document.querySelector('[data-id="' + id + '"]');
+        if (!card.classList.contains('read')) {
+          await fetch('/api/read/' + id, { method: 'POST' });
+          card.classList.add('read');
+          const btn = card.querySelector('.read-btn');
+          btn.classList.add('is-read');
+          btn.textContent = '✓';
+          btn.title = 'Mark unread';
+          updateUnreadCount();
+        }
+      }
+      function updateUnreadCount() {
+        const all = document.querySelectorAll('.card');
+        const unread = document.querySelectorAll('.card:not(.read)');
+        document.querySelector('.stat-value').textContent = unread.length;
+      }
+      function filterArticles(mode) {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        document.querySelectorAll('.card').forEach(card => {
+          const isRead = card.classList.contains('read');
+          if (mode === 'all') card.style.display = '';
+          else if (mode === 'unread') card.style.display = isRead ? 'none' : '';
+          else if (mode === 'read') card.style.display = isRead ? '' : 'none';
+        });
+      }
+    </script>
   </div>
 </body>
 </html>`;
@@ -350,6 +475,13 @@ export function startServer(port: number = 3000) {
       if (url.pathname === "/api/feeds") {
         const feeds = getFeeds();
         return Response.json(feeds);
+      }
+
+      const readMatch = url.pathname.match(/^\/api\/read\/(\d+)$/);
+      if (readMatch && req.method === "POST") {
+        const id = Number(readMatch[1]);
+        toggleRead(id);
+        return Response.json({ ok: true });
       }
 
       if (url.pathname === "/") {

@@ -17,6 +17,7 @@ export interface Article {
   score: number | null;
   summary: string | null;
   curated_at: string | null;
+  read_at: string | null;
 }
 
 export interface RssItem {

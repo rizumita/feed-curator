@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { db } from "./db";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle } from "./feed";
-import { addArticle, listArticles, updateArticleCuration } from "./article";
+import { addArticle, listArticles, updateArticleCuration, markAsRead, markAsUnread } from "./article";
 import { parseFeed } from "./rss";
 import { startServer } from "./server";
 
@@ -114,9 +114,13 @@ program
   .command("articles")
   .description("List articles")
   .option("--uncurated", "Show only uncurated articles")
+  .option("--unread", "Show only unread articles")
   .option("--json", "Output as JSON")
-  .action((opts: { uncurated?: boolean; json?: boolean }) => {
-    const articles = listArticles(opts.uncurated ?? false);
+  .action((opts: { uncurated?: boolean; unread?: boolean; json?: boolean }) => {
+    let articles = listArticles(opts.uncurated ?? false);
+    if (opts.unread) {
+      articles = articles.filter((a) => a.read_at === null);
+    }
     if (articles.length === 0) {
       console.log(opts.uncurated ? "No uncurated articles." : "No articles.");
       return;
@@ -129,7 +133,8 @@ program
 
     for (const a of articles) {
       const score = a.score !== null ? ` [Score: ${a.score}]` : "";
-      console.log(`[${a.id}] ${a.title ?? "(no title)"}${score}`);
+      const read = a.read_at ? " ✓" : "";
+      console.log(`[${a.id}] ${a.title ?? "(no title)"}${score}${read}`);
       console.log(`    ${a.url}`);
       if (a.summary) console.log(`    Summary: ${a.summary}`);
     }
@@ -145,6 +150,30 @@ program
   .action((id: string, opts: { score: string; summary: string }) => {
     updateArticleCuration(Number(id), Number(opts.score), opts.summary);
     console.log(`Updated article ${id}.`);
+  });
+
+// feed read <id...>
+program
+  .command("read")
+  .description("Mark articles as read")
+  .argument("<ids...>", "Article IDs")
+  .action((ids: string[]) => {
+    for (const id of ids) {
+      markAsRead(Number(id));
+    }
+    console.log(`Marked ${ids.length} article(s) as read.`);
+  });
+
+// feed unread <id...>
+program
+  .command("unread")
+  .description("Mark articles as unread")
+  .argument("<ids...>", "Article IDs")
+  .action((ids: string[]) => {
+    for (const id of ids) {
+      markAsUnread(Number(id));
+    }
+    console.log(`Marked ${ids.length} article(s) as unread.`);
   });
 
 // feed config

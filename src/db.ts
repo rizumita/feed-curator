@@ -39,6 +39,14 @@ db.run(`
     score REAL,
     summary TEXT,
     curated_at TEXT,
+    read_at TEXT,
     FOREIGN KEY (feed_id) REFERENCES feeds(id)
   )
 `);
+
+// Migration: add read_at column if missing
+try {
+  db.run("ALTER TABLE articles ADD COLUMN read_at TEXT");
+} catch {
+  // column already exists
+}

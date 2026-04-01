@@ -1,0 +1,15 @@
+{
+  "name": "feed-curator",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "feed": "bun src/cli.ts"
+  },
+  "dependencies": {
+    "commander": "^13.0.0",
+    "fast-xml-parser": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}

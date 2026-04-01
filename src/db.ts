@@ -1,0 +1,37 @@
+import { Database } from "bun:sqlite";
+import { mkdirSync } from "fs";
+
+const DB_PATH = process.env.DB_PATH ?? "./data/feed-curator.db";
+
+mkdirSync("./data", { recursive: true });
+
+export const db = new Database(DB_PATH);
+
+db.run("PRAGMA journal_mode = WAL");
+db.run("PRAGMA foreign_keys = ON");
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS feeds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    url TEXT NOT NULL UNIQUE,
+    title TEXT,
+    last_fetched_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`);
+
+db.run(`
+  CREATE TABLE IF NOT EXISTS articles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    feed_id INTEGER,
+    url TEXT NOT NULL UNIQUE,
+    title TEXT,
+    content TEXT,
+    published_at TEXT,
+    fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+    score REAL,
+    summary TEXT,
+    curated_at TEXT,
+    FOREIGN KEY (feed_id) REFERENCES feeds(id)
+  )
+`);

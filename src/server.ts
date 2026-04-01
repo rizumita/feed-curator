@@ -185,6 +185,11 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
+      --sidebar-w: 220px;
+    }
+
+    /* Dark theme (default) */
+    :root, [data-theme="dark"] {
       --bg: #09090b;
       --surface: #18181b;
       --surface-hover: #1e1e22;
@@ -193,9 +198,49 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       --text: #fafafa;
       --text-muted: #a1a1aa;
       --text-dim: #71717a;
-      --accent: #a78bfa;
+      --accent: #7c3aed;
+      --accent-light: #a78bfa;
       --accent-glow: rgba(167, 139, 250, 0.12);
-      --sidebar-w: 220px;
+      --tag-bg: rgba(167, 139, 250, 0.12);
+      --tag-text: #a78bfa;
+      --logo-from: #fff;
+    }
+
+    /* Light theme */
+    [data-theme="light"] {
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --surface-hover: #f4f4f5;
+      --border: #e4e4e7;
+      --border-light: #d4d4d8;
+      --text: #18181b;
+      --text-muted: #52525b;
+      --text-dim: #71717a;
+      --accent: #7c3aed;
+      --accent-light: #7c3aed;
+      --accent-glow: rgba(124, 58, 237, 0.08);
+      --tag-bg: rgba(124, 58, 237, 0.08);
+      --tag-text: #6d28d9;
+      --logo-from: #18181b;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg: #fafafa;
+        --surface: #ffffff;
+        --surface-hover: #f4f4f5;
+        --border: #e4e4e7;
+        --border-light: #d4d4d8;
+        --text: #18181b;
+        --text-muted: #52525b;
+        --text-dim: #71717a;
+        --accent: #7c3aed;
+        --accent-light: #7c3aed;
+        --accent-glow: rgba(124, 58, 237, 0.08);
+        --tag-bg: rgba(124, 58, 237, 0.08);
+        --tag-text: #6d28d9;
+        --logo-from: #18181b;
+      }
     }
 
     body {
@@ -236,7 +281,7 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       font-size: 1.125rem;
       font-weight: 700;
       letter-spacing: -0.03em;
-      background: linear-gradient(135deg, #fff 0%, var(--accent) 100%);
+      background: linear-gradient(135deg, var(--logo-from) 0%, var(--accent-light) 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
@@ -410,7 +455,7 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       padding: 0;
     }
 
-    .read-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .read-btn:hover { border-color: var(--accent-light); color: var(--accent-light); }
     .read-btn.is-read { background: var(--accent); border-color: var(--accent); color: #fff; }
 
     .card-body { flex: 1; min-width: 0; }
@@ -458,7 +503,7 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       width: 5px;
       height: 5px;
       border-radius: 50%;
-      background: var(--accent);
+      background: var(--accent-light);
       margin-right: 0.25rem;
       vertical-align: middle;
     }
@@ -470,8 +515,8 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       font-size: 0.6875rem;
       padding: 0.0625rem 0.4rem;
       border-radius: 4px;
-      background: rgba(167, 139, 250, 0.12);
-      color: var(--accent);
+      background: var(--tag-bg);
+      color: var(--tag-text);
       margin-right: 0.25rem;
     }
 
@@ -492,8 +537,36 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       transition: all 0.12s ease;
     }
 
-    .tag-filter:hover { border-color: var(--accent); color: var(--accent); }
+    .tag-filter:hover { border-color: var(--accent-light); color: var(--accent-light); }
     .tag-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .sidebar-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .theme-toggle {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      width: 2rem;
+      height: 2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      color: var(--text-dim);
+      font-size: 1rem;
+    }
+
+    .theme-toggle:hover { border-color: var(--accent-light); color: var(--accent-light); }
+
+    /* Theme icons: sun=light, moon=dark, half=auto */
+    .theme-icon::before { content: "\\25D0"; }
+    [data-theme="dark"] .theme-icon::before { content: "\\2600"; }
+    [data-theme="light"] .theme-icon::before { content: "\\263E"; }
 
     /* --- Score Ring --- */
     .card-score {
@@ -573,7 +646,12 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
 <body>
   <div class="layout">
     <aside class="sidebar">
-      <div class="logo">Feed Curator</div>
+      <div class="sidebar-top">
+        <div class="logo">Feed Curator</div>
+        <button class="theme-toggle" onclick="cycleTheme()" title="Toggle theme" aria-label="Toggle theme">
+          <span class="theme-icon"></span>
+        </button>
+      </div>
       <div class="date-label">${now}</div>
 
       <div class="stats-grid">
@@ -671,6 +749,31 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       const unread = document.querySelectorAll('.card:not(.read)').length;
       document.getElementById('unread-count').textContent = unread;
     }
+
+    // Theme management
+    function getPreferredTheme() {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved;
+      return 'auto';
+    }
+
+    function applyTheme(theme) {
+      if (theme === 'auto') {
+        document.documentElement.removeAttribute('data-theme');
+      } else {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+      localStorage.setItem('theme', theme);
+    }
+
+    function cycleTheme() {
+      const current = getPreferredTheme();
+      const next = current === 'auto' ? 'light' : current === 'light' ? 'dark' : 'auto';
+      applyTheme(next);
+    }
+
+    // Apply saved theme on load
+    applyTheme(getPreferredTheme());
 
     let currentTagFilter = 'all';
     let currentReadFilter = 'all';

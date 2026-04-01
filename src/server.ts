@@ -813,7 +813,7 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
 
     // --- Filter state from URL params ---
     const params = new URLSearchParams(location.search);
-    let currentReadFilter = params.get('read') || 'all';
+    let currentReadFilter = params.get('read') || 'unread';
     let currentTagFilter = params.get('tag') || 'all';
     let currentCategoryFilter = params.get('category') || 'all';
 

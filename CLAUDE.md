@@ -10,7 +10,7 @@ AI-powered RSS feed curation tool. Claude Code acts as the AI curator — no API
 ## CLI Commands
 
 ```
-bun src/cli.ts add <url>              # Register RSS feed
+bun src/cli.ts add <url> [-c category] # Register RSS feed with category
 bun src/cli.ts list                   # List registered feeds
 bun src/cli.ts fetch                  # Fetch articles from all feeds
 bun src/cli.ts add-article <url>      # Add single article URL
@@ -19,6 +19,7 @@ bun src/cli.ts update <id> --score <n> --summary "..." [--tags "a,b"]  # Update 
 bun src/cli.ts tag <id> <tags>        # Set tags on an article
 bun src/cli.ts read <id...>           # Mark articles as read
 bun src/cli.ts unread <id...>         # Mark articles as unread
+bun src/cli.ts categorize <id> <cat>  # Set feed category
 bun src/cli.ts serve [--port 3000]    # Start web UI server
 bun src/cli.ts config <key> [value]   # Get/set config (e.g. language)
 ```

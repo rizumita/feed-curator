@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { db } from "./db";
-import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle } from "./feed";
+import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle, updateFeedCategory } from "./feed";
 import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread } from "./article";
 import { parseFeed } from "./rss";
 import { startServer } from "./server";
@@ -13,8 +13,9 @@ program
   .command("add")
   .description("Register an RSS feed URL")
   .argument("<url>", "RSS feed URL")
-  .action((url: string) => {
-    addFeed(url);
+  .option("-c, --category <category>", "Feed category")
+  .action((url: string, opts: { category?: string }) => {
+    addFeed(url, undefined, opts.category);
   });
 
 // feed list
@@ -28,7 +29,8 @@ program
       return;
     }
     for (const f of feeds) {
-      console.log(`[${f.id}] ${f.title ?? "(no title)"} - ${f.url}`);
+      const cat = f.category ? ` [${f.category}]` : "";
+      console.log(`[${f.id}] ${f.title ?? "(no title)"}${cat} - ${f.url}`);
       if (f.last_fetched_at) console.log(`    Last fetched: ${f.last_fetched_at}`);
     }
   });
@@ -186,6 +188,17 @@ program
       markAsUnread(Number(id));
     }
     console.log(`Marked ${ids.length} article(s) as unread.`);
+  });
+
+// feed categorize <feed-id> <category>
+program
+  .command("categorize")
+  .description("Set category on a feed")
+  .argument("<id>", "Feed ID")
+  .argument("<category>", "Category name")
+  .action((id: string, category: string) => {
+    updateFeedCategory(Number(id), category);
+    console.log(`Feed ${id} categorized as: ${category}`);
   });
 
 // feed config

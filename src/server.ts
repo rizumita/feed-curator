@@ -1,19 +1,27 @@
 import { db } from "./db";
 import type { Article, Feed } from "./types";
 
-type ArticleWithFeed = Article & { feed_title: string | null };
+type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
 
 function getCuratedArticles(sort: "newest" | "score" = "newest"): ArticleWithFeed[] {
   const order = sort === "score" ? "a.score DESC" : "a.published_at DESC, a.fetched_at DESC";
   return db
     .query(
-      `SELECT a.*, f.title as feed_title
+      `SELECT a.*, f.title as feed_title, f.category
        FROM articles a
        LEFT JOIN feeds f ON a.feed_id = f.id
        WHERE a.curated_at IS NOT NULL
        ORDER BY ${order}`
     )
     .all() as ArticleWithFeed[];
+}
+
+function getAllCategories(articles: ArticleWithFeed[]): string[] {
+  const catSet = new Set<string>();
+  for (const a of articles) {
+    if (a.category) catSet.add(a.category);
+  }
+  return [...catSet].sort();
 }
 
 function getAllTags(articles: ArticleWithFeed[]): string[] {
@@ -106,7 +114,7 @@ function renderCard(a: ArticleWithFeed): string {
   const tagsHtml = tags.map((t: string) => `<span class="tag" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
 
   return `
-    <article class="card${isRead ? " read" : ""}" data-id="${a.id}" data-tier="${tier.id}" data-tags="${escapeHtml(tags.join(","))}">
+    <article class="card${isRead ? " read" : ""}" data-id="${a.id}" data-tier="${tier.id}" data-tags="${escapeHtml(tags.join(","))}" data-category="${escapeHtml(a.category ?? "")}">
       <div class="card-row">
         <button class="read-btn${isRead ? " is-read" : ""}" onclick="toggleRead(${a.id})" title="${isRead ? "Mark unread" : "Mark read"}">
           ${isRead ? "✓" : ""}
@@ -156,6 +164,7 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
   }).filter((g) => g.articles.length > 0);
 
   const allTags = getAllTags(articles);
+  const allCategories = getAllCategories(articles);
 
   const tocLinks = sections
     .map((s) => `<a href="#${s.tier.id}" class="toc-link" style="--tc:${s.tier.color}"><span class="toc-dot" style="background:${s.tier.color}"></span>${s.tier.label}<span class="toc-count">${s.articles.length}</span></a>`)
@@ -673,6 +682,15 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
         </div>
       </div>
 
+      ${allCategories.length > 0 ? `
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Category</div>
+        <div class="filter-list" id="category-filters">
+          <button class="filter-btn active" onclick="filterByCategory('all', this)">All</button>
+          ${allCategories.map(c => `<button class="filter-btn" onclick="filterByCategory('${escapeHtml(c)}', this)">${escapeHtml(c)}</button>`).join("\n")}
+        </div>
+      </div>` : ""}
+
       <div class="sidebar-section">
         <div class="sidebar-heading">Sort</div>
         <div class="filter-list">
@@ -777,15 +795,18 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
 
     let currentTagFilter = 'all';
     let currentReadFilter = 'all';
+    let currentCategoryFilter = 'all';
 
     function applyFilters() {
       document.querySelectorAll('.card').forEach(card => {
         const isRead = card.classList.contains('read');
         const tags = (card.dataset.tags || '').split(',').map(t => t.trim());
+        const category = card.dataset.category || '';
         let show = true;
         if (currentReadFilter === 'unread' && isRead) show = false;
         if (currentReadFilter === 'read' && !isRead) show = false;
         if (currentTagFilter !== 'all' && !tags.includes(currentTagFilter)) show = false;
+        if (currentCategoryFilter !== 'all' && category !== currentCategoryFilter) show = false;
         card.style.display = show ? '' : 'none';
       });
       document.querySelectorAll('.tier-section').forEach(sec => {
@@ -805,6 +826,13 @@ function renderPage(articles: ArticleWithFeed[], sort: "newest" | "score" = "new
       document.querySelectorAll('.tag-filter').forEach(b => b.classList.remove('active'));
       el.classList.add('active');
       currentTagFilter = tag;
+      applyFilters();
+    }
+
+    function filterByCategory(cat, el) {
+      document.querySelectorAll('#category-filters .filter-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      currentCategoryFilter = cat;
       applyFilters();
     }
 

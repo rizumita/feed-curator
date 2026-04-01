@@ -36,8 +36,9 @@ The user provides a topic or interest area (e.g., "AI-driven development", "Rust
 
 5. **Register selected feeds**: For each approved feed, run:
    ```
-   bun src/cli.ts add <feed-url>
+   bun src/cli.ts add <feed-url> --category "<topic-category>"
    ```
+   Use the topic as the category name (e.g. "AI Development", "Rust", "Cloud Native").
 
 6. **Optionally fetch**: Ask the user if they want to fetch articles from the newly added feeds right away. If yes, run:
    ```

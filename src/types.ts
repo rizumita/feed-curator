@@ -3,6 +3,7 @@ export interface Feed {
   url: string;
   title: string | null;
   last_fetched_at: string | null;
+  category: string | null;
   created_at: string;
 }
 

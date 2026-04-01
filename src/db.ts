@@ -45,9 +45,13 @@ db.run(`
 `);
 
 // Migrations
-for (const col of ["read_at TEXT", "tags TEXT"]) {
+for (const [table, col] of [
+  ["articles", "read_at TEXT"],
+  ["articles", "tags TEXT"],
+  ["feeds", "category TEXT"],
+]) {
   try {
-    db.run(`ALTER TABLE articles ADD COLUMN ${col}`);
+    db.run(`ALTER TABLE ${table} ADD COLUMN ${col}`);
   } catch {
     // column already exists
   }

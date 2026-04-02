@@ -36,6 +36,7 @@ export function isPreferenceMemoStale(): boolean {
 }
 
 export function getRecentActions(days: number, limit: number): RecentAction[] {
+  if (!Number.isFinite(days) || days <= 0 || !Number.isFinite(limit) || limit <= 0) return [];
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   return db.prepare(
     `SELECT title, summary, tags, score,

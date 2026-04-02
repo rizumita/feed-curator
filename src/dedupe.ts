@@ -46,6 +46,9 @@ export function canonicalizeUrl(rawUrl: string): string {
     // Remove fragment
     url.hash = "";
 
+    // Collapse consecutive slashes in path (e.g. /// → /)
+    url.pathname = url.pathname.replace(/\/{2,}/g, "/");
+
     // Build canonical URL and remove trailing slash (except for root path)
     let canonical = url.toString();
     if (canonical.endsWith("/") && url.pathname !== "/") {

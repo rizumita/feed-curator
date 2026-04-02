@@ -1,6 +1,14 @@
 {
   "name": "feed-curator",
   "version": "0.1.0",
+  "description": "AI-powered RSS feed curation tool using Claude Code as the AI curator",
+  "author": "Ryoichi Izumita <r.izumita@caph.jp>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rizumita/feed-curator.git"
+  },
+  "keywords": ["rss", "feed", "curation", "ai", "claude-code"],
   "type": "module",
   "scripts": {
     "feed": "bun src/cli.ts"

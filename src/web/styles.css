@@ -103,6 +103,17 @@ body {
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.logo-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  -webkit-text-fill-color: initial;
+  color: var(--accent-light);
 }
 
 .date-label {

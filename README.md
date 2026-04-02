@@ -21,51 +21,52 @@ Collect articles from RSS feeds, let Claude Code summarize and score them, and b
 ## Requirements
 
 - [Node.js](https://nodejs.org/) (v18+)
-- [pnpm](https://pnpm.io/)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## Quick Start
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/rizumita/feed-curator.git
-cd feed-curator
-pnpm install
-
-# 2. Start the web UI
-npx tsx src/cli.ts serve
+# Install and start
+npx feed-curator serve
 # Open http://localhost:3000
-
-# 3. Choose your language when prompted on first visit
-
-# 4. Discover feeds — enter a topic in the search box (e.g. "AI", "Rust")
-
-# 5. Click "Update" to fetch articles + AI curate + generate briefing
 ```
+
+Or install globally:
+
+```bash
+npm install -g feed-curator
+feed-curator serve
+```
+
+1. Choose your language when prompted on first visit
+2. Discover feeds — enter a topic in the search box (e.g. "AI", "Rust")
+3. Click "Update" to fetch articles + AI curate + generate briefing
 
 That's it — the Web UI handles everything. For advanced use, see the CLI commands below.
 
 ## CLI Commands
 
 ```
-npx tsx src/cli.ts add <url> [-c category]   # Register RSS feed
-npx tsx src/cli.ts list                      # List registered feeds
-npx tsx src/cli.ts fetch                     # Fetch articles from all feeds
-npx tsx src/cli.ts add-article <url>         # Add single article URL
-npx tsx src/cli.ts articles [--uncurated] [--unread] [--json]
-npx tsx src/cli.ts update <id> --score <n> --summary "..." [--tags "a,b"]
-npx tsx src/cli.ts tag <id> <tags>           # Set tags on an article
-npx tsx src/cli.ts read <id...>              # Mark articles as read
-npx tsx src/cli.ts unread <id...>            # Mark articles as unread
-npx tsx src/cli.ts categorize <id> <cat>     # Set feed category
-npx tsx src/cli.ts profile [--prompt]        # Show reading profile
-npx tsx src/cli.ts serve [--port 3000]       # Start web UI server
-npx tsx src/cli.ts config <key> [value]      # Get/set config
+feed-curator add <url> [-c category]   # Register RSS feed
+feed-curator list                      # List registered feeds
+feed-curator fetch                     # Fetch articles from all feeds
+feed-curator add-article <url>         # Add single article URL
+feed-curator articles [--uncurated] [--unread] [--json]
+feed-curator update <id> --score <n> --summary "..." [--tags "a,b"]
+feed-curator tag <id> <tags>           # Set tags on an article
+feed-curator read <id...>              # Mark articles as read
+feed-curator unread <id...>            # Mark articles as unread
+feed-curator categorize <id> <cat>     # Set feed category
+feed-curator profile [--prompt]        # Show reading profile
+feed-curator serve [--port 3000]       # Start web UI server
+feed-curator config <key> [value]      # Get/set config
 ```
+
+All commands also work with `npx feed-curator <command>`.
 
 ## Web UI
 
-Start with `npx tsx src/cli.ts serve` and open http://localhost:3000.
+Start with `feed-curator serve` and open http://localhost:3000.
 
 ### Views
 
@@ -135,47 +136,48 @@ RSSフィードから記事を収集し、Claude Codeが要約・スコアリン
 ## 必要なもの
 
 - [Node.js](https://nodejs.org/) (v18+)
-- [pnpm](https://pnpm.io/)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## クイックスタート
 
 ```bash
-# 1. クローンしてインストール
-git clone https://github.com/rizumita/feed-curator.git
-cd feed-curator
-pnpm install
-
-# 2. Web UIを起動
-npx tsx src/cli.ts serve
+# インストールして起動
+npx feed-curator serve
 # http://localhost:3000 を開く
-
-# 3. 初回アクセス時に言語を選択
-
-# 4. 検索ボックスにトピックを入力してフィードを発見（例: "AI", "Rust"）
-
-# 5. 「Update」ボタンで記事取得 → AIキュレーション → ブリーフィング生成を一括実行
 ```
+
+またはグローバルインストール:
+
+```bash
+npm install -g feed-curator
+feed-curator serve
+```
+
+1. 初回アクセス時に言語を選択
+2. 検索ボックスにトピックを入力してフィードを発見（例: "AI", "Rust"）
+3. 「Update」ボタンで記事取得 → AIキュレーション → ブリーフィング生成を一括実行
 
 Web UIですべて完結します。高度な使い方はCLIコマンドを参照してください。
 
 ## CLIコマンド
 
 ```
-npx tsx src/cli.ts add <url> [-c カテゴリー]  # RSSフィード登録
-npx tsx src/cli.ts list                       # 登録フィード一覧
-npx tsx src/cli.ts fetch                      # 全フィードから記事取得
-npx tsx src/cli.ts add-article <url>          # 単独記事URL追加
-npx tsx src/cli.ts articles [--uncurated] [--unread] [--json]
-npx tsx src/cli.ts update <id> --score <n> --summary "..." [--tags "a,b"]
-npx tsx src/cli.ts tag <id> <tags>            # 記事にタグ設定
-npx tsx src/cli.ts read <id...>               # 既読にする
-npx tsx src/cli.ts unread <id...>             # 未読に戻す
-npx tsx src/cli.ts categorize <id> <cat>      # フィードのカテゴリー設定
-npx tsx src/cli.ts profile [--prompt]         # 読書プロファイル表示
-npx tsx src/cli.ts serve [--port 3000]        # Web UIサーバー起動
-npx tsx src/cli.ts config <key> [value]       # 設定の取得/変更
+feed-curator add <url> [-c カテゴリー]  # RSSフィード登録
+feed-curator list                       # 登録フィード一覧
+feed-curator fetch                      # 全フィードから記事取得
+feed-curator add-article <url>          # 単独記事URL追加
+feed-curator articles [--uncurated] [--unread] [--json]
+feed-curator update <id> --score <n> --summary "..." [--tags "a,b"]
+feed-curator tag <id> <tags>            # 記事にタグ設定
+feed-curator read <id...>               # 既読にする
+feed-curator unread <id...>             # 未読に戻す
+feed-curator categorize <id> <cat>      # フィードのカテゴリー設定
+feed-curator profile [--prompt]         # 読書プロファイル表示
+feed-curator serve [--port 3000]        # Web UIサーバー起動
+feed-curator config <key> [value]       # 設定の取得/変更
 ```
+
+`npx feed-curator <コマンド>` でも同様に使えます。
 
 ## キュレーションの仕組み
 

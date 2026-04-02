@@ -47,10 +47,17 @@ export function loadStarterFeeds(customPath?: string): number {
     filePath = resolve(__dirname, "../examples/starter-feeds.json");
   }
 
-  const json = JSON.parse(readFileSync(filePath, "utf-8"));
-  const feeds: Array<{ url: string; category?: string }> = json.feeds;
+  let json: { feeds: Array<{ url: string; category?: string }> };
+  try {
+    json = JSON.parse(readFileSync(filePath, "utf-8"));
+  } catch (e) {
+    throw new Error(`Failed to read feed pack: ${filePath} (${(e as Error).message})`);
+  }
+  if (!Array.isArray(json.feeds)) {
+    throw new Error(`Invalid feed pack format: expected { feeds: [...] }`);
+  }
   let count = 0;
-  for (const f of feeds) {
+  for (const f of json.feeds) {
     if (addFeed(f.url, undefined, f.category)) count++;
   }
   return count;

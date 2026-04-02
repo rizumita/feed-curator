@@ -22,7 +22,7 @@ export function generateDigestMarkdown(date: string): string | null {
     const articles = getArticlesByIds(cluster.article_ids);
     for (const a of articles) {
       const score = a.score !== null ? Math.round(a.score * 100) : "—";
-      const title = a.title ?? "(no title)";
+      const title = (a.title ?? "(no title)").replace(/[\[\]]/g, "\\$&");
       lines.push(`- [${title}](${a.url}) — Score: ${score}`);
     }
     lines.push("");

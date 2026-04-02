@@ -30,6 +30,9 @@ program
     }
     const count = loadStarterFeeds(opts.file);
     console.log(`Added ${count} feed(s).`);
+    if (count > 0) {
+      console.log("Run 'feed-curator start' to fetch, curate, and open the web UI.");
+    }
   });
 
 // feed add <url>

@@ -373,9 +373,10 @@ export function renderPage(
                </div>`
             : articles.length > 0
               ? sectionHtml
-              : `<div class="empty">
-                  <h2>No curated articles yet</h2>
-                  <p>Click <strong>Update</strong> in the sidebar to fetch and curate articles.</p>
+              : `<div class="onboarding">
+                  <h1>No curated articles yet</h1>
+                  <p>Fetch articles and let AI curate them.</p>
+                  <button onclick="runUpdate()" class="onboarding-btn">Update Now</button>
                 </div>`
       }
       <footer>Feed Curator &mdash; AI-powered curation by Claude Code</footer>

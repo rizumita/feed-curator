@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { db } from "./db";
 import type { Feed } from "./types";
 import { addArticle } from "./article";
@@ -33,6 +36,24 @@ export function updateFeedCategory(feedId: number, category: string): void {
 export function removeFeed(feedId: number): void {
   db.prepare("DELETE FROM articles WHERE feed_id = ?").run(feedId);
   db.prepare("DELETE FROM feeds WHERE id = ?").run(feedId);
+}
+
+export function loadStarterFeeds(customPath?: string): number {
+  let filePath: string;
+  if (customPath) {
+    filePath = resolve(customPath);
+  } else {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    filePath = resolve(__dirname, "../examples/starter-feeds.json");
+  }
+
+  const json = JSON.parse(readFileSync(filePath, "utf-8"));
+  const feeds: Array<{ url: string; category?: string }> = json.feeds;
+  let count = 0;
+  for (const f of feeds) {
+    if (addFeed(f.url, undefined, f.category)) count++;
+  }
+  return count;
 }
 
 export async function fetchAllFeeds(opts?: { verbose?: boolean; onProgress?: (msg: string) => void }): Promise<number> {

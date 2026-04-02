@@ -1,0 +1,17 @@
+{
+  "description": "Starter feed pack for developers. Use with: feed-curator init --starter",
+  "feeds": [
+    { "url": "https://blog.anthropic.com/rss.xml", "category": "AI" },
+    { "url": "https://openai.com/blog/rss.xml", "category": "AI" },
+    { "url": "https://huggingface.co/blog/feed.xml", "category": "AI" },
+    { "url": "https://ai.googleblog.com/atom.xml", "category": "AI" },
+    { "url": "https://hnrss.org/frontpage", "category": "Dev" },
+    { "url": "https://github.blog/feed/", "category": "Dev" },
+    { "url": "https://dev.to/feed", "category": "Dev" },
+    { "url": "https://www.infoq.com/feed/", "category": "Dev" },
+    { "url": "https://krebsonsecurity.com/feed/", "category": "Security" },
+    { "url": "https://feeds.feedburner.com/TheHackersNews", "category": "Security" },
+    { "url": "https://android-developers.googleblog.com/atom.xml", "category": "Mobile" },
+    { "url": "https://developer.apple.com/news/rss/news.rss", "category": "Mobile" }
+  ]
+}

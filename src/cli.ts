@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { addFeed, listFeeds, updateFeedCategory, fetchAllFeeds } from "./feed";
+import { addFeed, listFeeds, updateFeedCategory, fetchAllFeeds, loadStarterFeeds } from "./feed";
 import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticles, getAutoArchiveDays, runAutoArchive, saveBriefing, getBriefing, getConfig, setConfig, isPreferenceMemoStale } from "./article";
 import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
@@ -13,6 +13,21 @@ program.name("feed-curator").description("AI-powered RSS feed curation tool");
 if (process.argv.length === 2) {
   process.argv.push("start");
 }
+
+// feed init
+program
+  .command("init")
+  .description("Initialize with starter feeds")
+  .option("--starter", "Load starter feed pack for developers")
+  .option("--file <path>", "Load feeds from a custom JSON file")
+  .action((opts: { starter?: boolean; file?: string }) => {
+    if (!opts.starter && !opts.file) {
+      console.log("Use --starter to load developer feeds, or --file <path> for a custom feed pack.");
+      return;
+    }
+    const count = loadStarterFeeds(opts.file);
+    console.log(`Added ${count} feed(s).`);
+  });
 
 // feed add <url>
 program

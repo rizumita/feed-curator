@@ -15,5 +15,6 @@ export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   async onSuccess() {
     cpSync("src/web", "dist/web", { recursive: true });
+    cpSync("examples", "dist/examples", { recursive: true });
   },
 });

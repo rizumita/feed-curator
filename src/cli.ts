@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import { Command } from "commander";
 import { db } from "./db";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle, updateFeedCategory } from "./feed";
@@ -5,9 +6,15 @@ import { addArticle, listArticles, updateArticleCuration, updateArticleTags, mar
 import { parseFeed } from "./rss";
 import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
+import { aiCurate, aiBriefing } from "./ai";
 
 const program = new Command();
-program.name("feed").description("RSS Feed Curator CLI");
+program.name("feed-curator").description("AI-powered RSS feed curation tool");
+
+// Default to "start" when no command is given
+if (process.argv.length === 2) {
+  process.argv.push("start");
+}
 
 // feed add <url>
 program
@@ -315,6 +322,82 @@ program
       console.log(`   ${cluster.summary}`);
       console.log(`   Article IDs: ${cluster.article_ids.join(", ")}\n`);
     }
+  });
+
+// feed start (all-in-one: fetch → curate → briefing → serve)
+program
+  .command("start")
+  .description("Fetch feeds, AI-curate, generate briefing, and start web UI")
+  .option("-p, --port <port>", "Port number", "3000")
+  .option("--no-fetch", "Skip fetching feeds")
+  .option("--no-curate", "Skip AI curation")
+  .option("--no-briefing", "Skip briefing generation")
+  .action(async (opts: { port: string; fetch: boolean; curate: boolean; briefing: boolean }) => {
+    // 1. Fetch
+    if (opts.fetch) {
+      console.log("\n=== Fetching feeds ===");
+      const feeds = getAllFeeds();
+      if (feeds.length === 0) {
+        console.log("No feeds registered. Use 'feed add <url>' first.");
+      } else {
+        let totalNew = 0;
+        for (const feed of feeds) {
+          try {
+            const response = await fetch(feed.url);
+            if (!response.ok) {
+              console.error(`Failed to fetch ${feed.url}: ${response.status}`);
+              continue;
+            }
+            const contentLength = Number(response.headers.get("content-length") || 0);
+            if (contentLength > 10 * 1024 * 1024) {
+              console.warn(`Skipping ${feed.url}: response too large`);
+              continue;
+            }
+            const xml = await response.text();
+            const { title, items } = parseFeed(xml);
+            if (title) updateFeedTitle(feed.id, title);
+            let newCount = 0;
+            for (const item of items) {
+              if (!item.url) continue;
+              if (addArticle(item.url, item.title, item.content, feed.id, item.publishedAt ?? undefined)) newCount++;
+            }
+            updateFeedFetchedAt(feed.id);
+            console.log(`${feed.title ?? feed.url}: ${newCount} new`);
+            totalNew += newCount;
+          } catch (err) {
+            console.error(`Error fetching ${feed.url}:`, err);
+          }
+        }
+        console.log(`Total: ${totalNew} new articles.`);
+      }
+    }
+
+    // 2. AI Curate
+    if (opts.curate) {
+      console.log("\n=== AI Curation ===");
+      const count = await aiCurate();
+      console.log(`Curated ${count} article(s).`);
+    }
+
+    // 3. Briefing
+    if (opts.briefing) {
+      console.log("\n=== Generating Briefing ===");
+      await aiBriefing();
+    }
+
+    // 4. Auto-archive
+    const archiveDays = getAutoArchiveDays();
+    const archived = runAutoArchive(archiveDays);
+    if (archived > 0) console.log(`Auto-archived ${archived} old article(s).`);
+
+    // 5. Start server
+    const port = Number(opts.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      console.error("Error: port must be an integer between 1 and 65535.");
+      return;
+    }
+    console.log("\n=== Starting Web UI ===");
+    startServer(port);
   });
 
 // feed serve

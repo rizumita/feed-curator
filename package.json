@@ -10,6 +10,9 @@
   },
   "keywords": ["rss", "feed", "curation", "ai", "claude-code"],
   "type": "module",
+  "bin": {
+    "feed-curator": "src/cli.ts"
+  },
   "scripts": {
     "feed": "bun src/cli.ts",
     "test": "DB_PATH=./data/test.db bun test"

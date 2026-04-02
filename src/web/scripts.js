@@ -211,6 +211,38 @@ function setSort(sort) {
   location.href = qs ? '?' + qs : '/';
 }
 
+// --- Actions (Fetch / Curate / Briefing) ---
+async function runAction(action) {
+  var btn = document.getElementById('btn-' + action);
+  var status = document.getElementById('action-status');
+  var labels = { fetch: 'Fetching feeds...', curate: 'AI curating...', briefing: 'Generating briefing...' };
+  var endpoints = { fetch: '/api/fetch', curate: '/api/curate', briefing: '/api/briefing/generate' };
+
+  btn.disabled = true;
+  status.textContent = labels[action] || 'Running...';
+  status.className = 'action-status running';
+
+  try {
+    var res = await fetch(endpoints[action], { method: 'POST' });
+    var data = await res.json();
+    if (action === 'fetch') {
+      status.textContent = data.newArticles + ' new article(s) fetched.';
+    } else if (action === 'curate') {
+      status.textContent = data.curated + ' article(s) curated.';
+    } else {
+      status.textContent = data.ok ? 'Briefing generated.' : 'No articles for briefing.';
+    }
+    status.className = 'action-status done';
+    // Reload page after a short delay to show updated data
+    setTimeout(function() { location.reload(); }, 1500);
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+    status.className = 'action-status error';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // --- Discover Feeds ---
 async function discoverFeeds() {
   const input = document.getElementById('discover-topic');

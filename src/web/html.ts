@@ -218,6 +218,16 @@ export function renderPage(
       </div>
 
       <div class="sidebar-section">
+        <div class="sidebar-heading">Actions</div>
+        <div class="action-buttons">
+          <button class="action-btn" onclick="runAction('fetch')" id="btn-fetch">Fetch Feeds</button>
+          <button class="action-btn" onclick="runAction('curate')" id="btn-curate">AI Curate</button>
+          <button class="action-btn" onclick="runAction('briefing')" id="btn-briefing">Generate Briefing</button>
+        </div>
+        <div id="action-status" class="action-status"></div>
+      </div>
+
+      <div class="sidebar-section">
         <div class="sidebar-heading">View</div>
         <div class="filter-list" id="view-filters">
           <button class="filter-btn${view === "briefing" ? " active" : ""}" onclick="setView('briefing')">Briefing</button>

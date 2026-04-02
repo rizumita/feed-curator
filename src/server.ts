@@ -6,7 +6,10 @@ import { db } from "./db";
 import type { Article, Feed } from "./types";
 import { renderPage } from "./web/html";
 import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing } from "./article";
-import { aiDiscoverFeeds, registerDiscoveredFeed } from "./ai";
+import { aiDiscoverFeeds, registerDiscoveredFeed, aiCurate, aiBriefing } from "./ai";
+import { getAllFeeds, updateFeedFetchedAt, updateFeedTitle } from "./feed";
+import { addArticle } from "./article";
+import { parseFeed } from "./rss";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -166,6 +169,44 @@ export function startServer(port: number = 3000): void {
         const placeholders = ids.map(() => "?").join(",");
         db.prepare(`UPDATE articles SET dismissed_at = datetime('now') WHERE id IN (${placeholders}) AND dismissed_at IS NULL`).run(...ids);
         jsonResponse(res, { ok: true, count: ids.length });
+        return;
+      }
+
+      // POST /api/fetch — fetch articles from all feeds
+      if (url.pathname === "/api/fetch" && method === "POST") {
+        const feeds = getAllFeeds();
+        let totalNew = 0;
+        for (const feed of feeds) {
+          try {
+            const response = await globalThis.fetch(feed.url);
+            if (!response.ok) continue;
+            const contentLength = Number(response.headers.get("content-length") || 0);
+            if (contentLength > 10 * 1024 * 1024) continue;
+            const xml = await response.text();
+            const { title, items } = parseFeed(xml);
+            if (title) updateFeedTitle(feed.id, title);
+            for (const item of items) {
+              if (!item.url) continue;
+              if (addArticle(item.url, item.title, item.content, feed.id, item.publishedAt ?? undefined)) totalNew++;
+            }
+            updateFeedFetchedAt(feed.id);
+          } catch { /* skip failed feeds */ }
+        }
+        jsonResponse(res, { ok: true, newArticles: totalNew });
+        return;
+      }
+
+      // POST /api/curate — AI-curate uncurated articles
+      if (url.pathname === "/api/curate" && method === "POST") {
+        const count = await aiCurate();
+        jsonResponse(res, { ok: true, curated: count });
+        return;
+      }
+
+      // POST /api/briefing/generate — generate today's briefing
+      if (url.pathname === "/api/briefing/generate" && method === "POST") {
+        const success = await aiBriefing();
+        jsonResponse(res, { ok: success });
         return;
       }
 

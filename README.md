@@ -115,6 +115,27 @@ No API keys needed — Claude Code itself is the AI.
 - SQLite database: `data/feed-curator.db` (auto-created, gitignored)
 - Digest output: `output/digest-YYYY-MM-DD.md` (gitignored)
 
+## Roadmap
+
+### Next
+
+- [Explicit feedback (like/dislike)](https://github.com/rizumita/feed-curator/issues/6) — Direct signals beyond read/dismiss
+- [Cross-feed duplicate detection](https://github.com/rizumita/feed-curator/issues/8) — Deduplicate overlapping articles
+- [Two-stage curation (fast pass + precision re-rank)](https://github.com/rizumita/feed-curator/issues/9) — Speed up large feed sets
+- [Full-text re-curation for promising articles](https://github.com/rizumita/feed-curator/issues/10) — Deeper analysis for top candidates
+
+### Planned
+
+- [Multi-day storyline tracking](https://github.com/rizumita/feed-curator/issues/11) — Follow topics across days
+- [Manual preference hints (two-layer preference memo)](https://github.com/rizumita/feed-curator/issues/12) — Tell the AI what you care about explicitly
+- [Facet-based similar article recommendations](https://github.com/rizumita/feed-curator/issues/7) — Discover related reads
+
+### Exploring
+
+- [MCP server support](https://github.com/rizumita/feed-curator/issues/13) — Use from Claude Desktop / Claude Code directly
+- [Standalone binary distribution](https://github.com/rizumita/feed-curator/issues/14) — Single binary via Bun compile
+- [Homebrew tap](https://github.com/rizumita/feed-curator/issues/15) — `brew install feed-curator`
+
 ---
 
 # Feed Curator
@@ -191,6 +212,27 @@ feed-curator config <key> [value]       # 設定の取得/変更
 4. Web UIとMarkdownダイジェストに結果が反映
 
 Web UIの**Update**ボタンで3ステップを一括実行できます。
+
+## ロードマップ
+
+### 次のリリース
+
+- [明示的フィードバック (like/dislike)](https://github.com/rizumita/feed-curator/issues/6) — 既読/スキップ以外の直接的なシグナル
+- [クロスフィード重複検出](https://github.com/rizumita/feed-curator/issues/8) — 重複記事の自動検出
+- [2段階キュレーション](https://github.com/rizumita/feed-curator/issues/9) — 高速パス＋精密リランクで大量フィードに対応
+- [有望記事のフルテキスト再キュレーション](https://github.com/rizumita/feed-curator/issues/10) — 上位候補をより深く分析
+
+### 計画中
+
+- [マルチデイ・ストーリーライン](https://github.com/rizumita/feed-curator/issues/11) — 日をまたぐトピック追跡
+- [手動嗜好ヒント](https://github.com/rizumita/feed-curator/issues/12) — AIに明示的に興味を伝える2層プリファレンスメモ
+- [類似記事レコメンデーション](https://github.com/rizumita/feed-curator/issues/7) — ファセットベースの関連記事発見
+
+### 検討中
+
+- [MCPサーバー対応](https://github.com/rizumita/feed-curator/issues/13) — Claude Desktop / Claude Codeから直接利用
+- [スタンドアロンバイナリ](https://github.com/rizumita/feed-curator/issues/14) — Bun compileによる単一バイナリ配布
+- [Homebrew tap](https://github.com/rizumita/feed-curator/issues/15) — `brew install feed-curator`
 
 ## ライセンス
 

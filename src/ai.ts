@@ -1,5 +1,8 @@
 import { spawn } from "child_process";
-import { listArticles, updateArticleCuration, saveBriefing, getConfig, getRecentActions, savePreferenceMemo } from "./article";
+import { listArticles, updateArticleCuration } from "./article";
+import { saveBriefing } from "./briefing-data";
+import { getConfig } from "./config";
+import { getRecentActions, savePreferenceMemo } from "./preferences";
 import { generateProfile, profileForPrompt } from "./profile";
 import { normalizeTags } from "./tag";
 

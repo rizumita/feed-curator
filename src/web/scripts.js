@@ -278,11 +278,15 @@ async function readSSE(res, onMessage, onDone, onError) {
 }
 
 // --- Update: Fetch → Curate → Briefing (SSE) ---
+function getUpdateButtons() {
+  return document.querySelectorAll('#btn-update, .update-btn');
+}
+
 async function runUpdate() {
-  var btn = document.getElementById('btn-update');
+  var buttons = getUpdateButtons();
   var status = document.getElementById('action-status');
 
-  btn.disabled = true;
+  buttons.forEach(function(b) { b.disabled = true; b.textContent = 'Updating...'; });
   status.textContent = 'Updating...';
   status.className = 'action-status running';
 
@@ -308,7 +312,7 @@ async function runUpdate() {
     status.textContent = 'Error: ' + e.message;
     status.className = 'action-status error';
   } finally {
-    btn.disabled = false;
+    buttons.forEach(function(b) { b.disabled = false; });
   }
 }
 

@@ -358,7 +358,7 @@ export function renderPage(
           ? `<div class="onboarding">
               <h1>Feeds Ready</h1>
               <p>${stats.feeds} feed(s) registered. Fetch articles and let AI curate them.</p>
-              <button onclick="runUpdate()" id="btn-update-onboard" class="onboarding-btn">Update Now</button>
+              <button onclick="runUpdate()" class="onboarding-btn update-btn">Update Now</button>
             </div>`
         : view === "feeds"
           ? renderFeedsView(feeds ?? [])
@@ -376,7 +376,7 @@ export function renderPage(
               : `<div class="onboarding">
                   <h1>No curated articles yet</h1>
                   <p>Fetch articles and let AI curate them.</p>
-                  <button onclick="runUpdate()" class="onboarding-btn">Update Now</button>
+                  <button onclick="runUpdate()" class="onboarding-btn update-btn">Update Now</button>
                 </div>`
       }
       <footer>Feed Curator &mdash; AI-powered curation by Claude Code</footer>

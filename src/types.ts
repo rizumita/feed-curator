@@ -22,6 +22,8 @@ export interface Article {
   tags: string | null;
   dismissed_at: string | null;
   archived_at: string | null;
+  canonical_url: string | null;
+  duplicate_of: number | null;
 }
 
 export interface BriefingCluster {

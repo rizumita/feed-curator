@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { canonicalizeUrl } from "./dedupe";
 import type { Article, Briefing, BriefingCluster } from "./types";
 
 export type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
@@ -6,8 +7,8 @@ export type ArticleWithFeed = Article & { feed_title: string | null; category: s
 export function getCuratedArticles(sort: "newest" | "score" = "newest", view: "active" | "archive" = "active"): ArticleWithFeed[] {
   const order = sort === "score" ? "a.score DESC" : "a.published_at DESC, a.fetched_at DESC";
   const whereClause = view === "archive"
-    ? "WHERE a.curated_at IS NOT NULL AND (a.dismissed_at IS NOT NULL OR a.archived_at IS NOT NULL)"
-    : "WHERE a.curated_at IS NOT NULL AND a.dismissed_at IS NULL AND a.archived_at IS NULL";
+    ? "WHERE a.curated_at IS NOT NULL AND a.duplicate_of IS NULL AND (a.dismissed_at IS NOT NULL OR a.archived_at IS NOT NULL)"
+    : "WHERE a.curated_at IS NOT NULL AND a.duplicate_of IS NULL AND a.dismissed_at IS NULL AND a.archived_at IS NULL";
   return db
     .prepare(
       `SELECT a.*, f.title as feed_title, f.category
@@ -26,7 +27,7 @@ export function getActiveArticles(sort: "newest" | "score" = "newest"): ArticleW
       `SELECT a.*, f.title as feed_title, f.category
        FROM articles a
        LEFT JOIN feeds f ON a.feed_id = f.id
-       WHERE a.dismissed_at IS NULL AND a.archived_at IS NULL
+       WHERE a.duplicate_of IS NULL AND a.dismissed_at IS NULL AND a.archived_at IS NULL
        ORDER BY ${order}`
     )
     .all() as ArticleWithFeed[];
@@ -62,14 +63,23 @@ export function addArticle(
   feedId?: number,
   publishedAt?: string
 ): boolean {
+  const canonical = canonicalizeUrl(url);
+
+  // Check if a canonical duplicate already exists (different URL, same canonical)
+  const existing = db.prepare(
+    "SELECT id FROM articles WHERE canonical_url = ? AND url != ?"
+  ).get(canonical, url) as { id: number } | null;
+
   const result = db.prepare(
-    "INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at) VALUES (?, ?, ?, ?, ?)"
-  ).run(feedId ?? null, url, title ?? null, content ?? null, publishedAt ?? null);
+    "INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at, canonical_url, duplicate_of) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(feedId ?? null, url, title ?? null, content ?? null, publishedAt ?? null, canonical, existing?.id ?? null);
   return result.changes > 0;
 }
 
 export function listArticles(uncuratedOnly: boolean = false, limit?: number): Article[] {
-  const where = uncuratedOnly ? "WHERE curated_at IS NULL" : "";
+  const conditions = ["duplicate_of IS NULL"];
+  if (uncuratedOnly) conditions.push("curated_at IS NULL");
+  const where = `WHERE ${conditions.join(" AND ")}`;
   const limitClause = limit ? `LIMIT ${limit}` : "";
   return db
     .prepare(`SELECT * FROM articles ${where} ORDER BY fetched_at DESC ${limitClause}`)

@@ -1,3 +1,16 @@
+function hideCompletedClusters(card) {
+  var cluster = card.closest('.briefing-cluster');
+  if (!cluster) return;
+  var cards = cluster.querySelectorAll('.card');
+  var hasUnprocessed = false;
+  cards.forEach(function(c) {
+    var dismissed = c.style.display === 'none';
+    var read = c.classList.contains('read');
+    if (!dismissed && !read) hasUnprocessed = true;
+  });
+  if (!hasUnprocessed) cluster.style.display = 'none';
+}
+
 async function toggleRead(id) {
   await fetch('/api/read/' + id, { method: 'POST' });
   const card = document.querySelector('[data-id="' + id + '"]');
@@ -8,6 +21,7 @@ async function toggleRead(id) {
   btn.title = isRead ? 'Mark unread' : 'Mark read';
   updateUnreadCount();
   applyFilters();
+  hideCompletedClusters(card);
 }
 
 async function markRead(id) {
@@ -21,6 +35,7 @@ async function markRead(id) {
     btn.title = 'Mark unread';
     updateUnreadCount();
     applyFilters();
+    hideCompletedClusters(card);
   }
 }
 
@@ -173,6 +188,7 @@ async function dismissArticle(id) {
   await fetch('/api/dismiss/' + id, { method: 'POST' });
   const card = document.querySelector('[data-id="' + id + '"]');
   if (card) {
+    hideCompletedClusters(card);
     card.style.display = 'none';
     const section = card.closest('.tier-section');
     if (section) {
@@ -484,3 +500,14 @@ document.querySelectorAll('.tag-filter').forEach(b => {
   b.classList.toggle('active', (b.dataset.value || 'all') === currentTagFilter);
 });
 applyFilters();
+// Hide briefing clusters where all articles are already read or dismissed
+document.querySelectorAll('.briefing-cluster').forEach(function(cluster) {
+  var cards = cluster.querySelectorAll('.card');
+  var hasUnprocessed = false;
+  cards.forEach(function(c) {
+    var dismissed = c.style.display === 'none';
+    var read = c.classList.contains('read');
+    if (!dismissed && !read) hasUnprocessed = true;
+  });
+  if (!hasUnprocessed && cards.length > 0) cluster.style.display = 'none';
+});

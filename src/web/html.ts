@@ -159,6 +159,8 @@ function renderBriefingView(briefing: Briefing, articles: ArticleWithFeed[]): st
       .filter((a): a is ArticleWithFeed => a !== undefined);
 
     if (clusterArticles.length === 0) return "";
+    // Hide clusters where all articles are already read
+    if (clusterArticles.every(a => a.read_at !== null)) return "";
 
     const clusterIds = clusterArticles.map(a => a.id);
 

@@ -350,7 +350,7 @@ export function renderPage(
               <p>Get started by finding feeds to follow.</p>
               <div class="onboarding-search">
                 <input type="text" id="onboard-topic" placeholder="Enter a topic (e.g. AI, Rust, TypeScript...)" class="onboarding-input" />
-                <button onclick="document.getElementById('discover-topic').value=document.getElementById('onboard-topic').value;discoverFeeds()" class="onboarding-btn">Search Feeds</button>
+                <button id="onboard-search-btn" onclick="document.getElementById('discover-topic').value=document.getElementById('onboard-topic').value;discoverFeeds()" class="onboarding-btn">Search Feeds</button>
               </div>
             </div>`
         // Onboarding: feeds exist but no curated articles → prompt to update

@@ -316,12 +316,14 @@ async function runUpdate() {
 async function discoverFeeds() {
   var input = document.getElementById('discover-topic');
   var btn = document.getElementById('discover-btn');
+  var onboardBtn = document.getElementById('onboard-search-btn');
   var results = document.getElementById('discover-results');
   var topic = input.value.trim();
   if (!topic) return;
 
   btn.disabled = true;
   btn.textContent = 'Searching...';
+  if (onboardBtn) { onboardBtn.disabled = true; onboardBtn.textContent = 'Searching...'; }
   results.style.display = '';
   results.innerHTML = '<div class="discover-loading">Asking AI to find feeds...</div>';
 
@@ -387,6 +389,7 @@ async function discoverFeeds() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Search';
+    if (onboardBtn) { onboardBtn.disabled = false; onboardBtn.textContent = 'Search Feeds'; }
   }
 }
 

@@ -441,6 +441,7 @@ async function registerAllFeeds(topic) {
     }
   }
   btn.textContent = added + ' feed(s) registered';
+  if (added > 0) setTimeout(function() { location.reload(); }, 1000);
 }
 
 function closeDiscoverResults() {

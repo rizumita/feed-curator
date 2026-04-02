@@ -36,8 +36,8 @@ describe("textOf", () => {
     expect(textOf({ foo: "bar" })).toBe("");
   });
 
-  test("returns empty string for boolean", () => {
-    expect(textOf(true)).toBe("");
+  test("returns string for boolean", () => {
+    expect(textOf(true)).toBe("true");
   });
 });
 

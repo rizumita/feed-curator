@@ -11,5 +11,8 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "webapp-dev-plugin@caphtech-marketplace": true
   }
 }

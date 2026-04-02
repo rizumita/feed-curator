@@ -1,6 +1,60 @@
 import { db } from "./db";
 import type { Article, Briefing, BriefingCluster } from "./types";
 
+export type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
+
+export function getCuratedArticles(sort: "newest" | "score" = "newest", view: "active" | "archive" = "active"): ArticleWithFeed[] {
+  const order = sort === "score" ? "a.score DESC" : "a.published_at DESC, a.fetched_at DESC";
+  const whereClause = view === "archive"
+    ? "WHERE a.curated_at IS NOT NULL AND (a.dismissed_at IS NOT NULL OR a.archived_at IS NOT NULL)"
+    : "WHERE a.curated_at IS NOT NULL AND a.dismissed_at IS NULL AND a.archived_at IS NULL";
+  return db
+    .prepare(
+      `SELECT a.*, f.title as feed_title, f.category
+       FROM articles a
+       LEFT JOIN feeds f ON a.feed_id = f.id
+       ${whereClause}
+       ORDER BY ${order}`
+    )
+    .all() as ArticleWithFeed[];
+}
+
+export function getActiveArticles(sort: "newest" | "score" = "newest"): ArticleWithFeed[] {
+  const order = sort === "score" ? "a.score DESC, a.published_at DESC" : "a.published_at DESC, a.fetched_at DESC";
+  return db
+    .prepare(
+      `SELECT a.*, f.title as feed_title, f.category
+       FROM articles a
+       LEFT JOIN feeds f ON a.feed_id = f.id
+       WHERE a.dismissed_at IS NULL AND a.archived_at IS NULL
+       ORDER BY ${order}`
+    )
+    .all() as ArticleWithFeed[];
+}
+
+export function getStats(): { total: number; curated: number; unread: number; feeds: number; archived: number } {
+  const row = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM articles) as total,
+      (SELECT COUNT(*) FROM articles WHERE curated_at IS NOT NULL) as curated,
+      (SELECT COUNT(*) FROM articles WHERE curated_at IS NOT NULL AND read_at IS NULL AND dismissed_at IS NULL AND archived_at IS NULL) as unread,
+      (SELECT COUNT(*) FROM feeds) as feeds,
+      (SELECT COUNT(*) FROM articles WHERE curated_at IS NOT NULL AND (dismissed_at IS NOT NULL OR archived_at IS NOT NULL)) as archived
+  `).get() as any;
+  return { total: row.total, curated: row.curated, unread: row.unread, feeds: row.feeds, archived: row.archived };
+}
+
+export function toggleRead(id: number): boolean {
+  const article = db.prepare("SELECT read_at FROM articles WHERE id = ?").get(id) as { read_at: string | null } | null;
+  if (!article) return false;
+  if (article.read_at) {
+    db.prepare("UPDATE articles SET read_at = NULL WHERE id = ?").run(id);
+  } else {
+    db.prepare("UPDATE articles SET read_at = datetime('now') WHERE id = ?").run(id);
+  }
+  return true;
+}
+
 export function addArticle(
   url: string,
   title?: string,
@@ -27,6 +81,9 @@ export function updateArticleCuration(
   summary: string,
   tags?: string
 ): void {
+  if (!Number.isFinite(score) || score < 0 || score > 1) {
+    throw new RangeError(`score must be between 0 and 1, got ${score}`);
+  }
   if (tags !== undefined) {
     db.prepare(
       "UPDATE articles SET score = ?, summary = ?, tags = ?, curated_at = datetime('now') WHERE id = ?"
@@ -74,10 +131,13 @@ export function undismissArticle(id: number): void {
 
 export function getAutoArchiveDays(): number {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'auto_archive_days'").get() as { value: string } | null;
-  return row ? parseInt(row.value, 10) : 7;
+  if (!row) return 7;
+  const days = parseInt(row.value, 10);
+  return Number.isFinite(days) && days > 0 ? days : 7;
 }
 
 export function runAutoArchive(days: number): number {
+  if (!Number.isFinite(days) || days <= 0) return 0;
   const result = db.prepare(
     `UPDATE articles
      SET archived_at = datetime('now')
@@ -85,8 +145,11 @@ export function runAutoArchive(days: number): number {
        AND read_at IS NULL
        AND dismissed_at IS NULL
        AND archived_at IS NULL
-       AND datetime(COALESCE(published_at, fetched_at), '+' || ? || ' days') < datetime('now')`
-  ).run(days);
+       AND COALESCE(
+         datetime(COALESCE(published_at, fetched_at), '+' || ? || ' days'),
+         datetime(fetched_at, '+' || ? || ' days')
+       ) < datetime('now')`
+  ).run(days, days);
   return result.changes;
 }
 
@@ -105,4 +168,13 @@ export function getBriefing(date: string): Briefing | null {
 export function getTodayBriefing(): Briefing | null {
   const today = new Date().toISOString().slice(0, 10);
   return getBriefing(today);
+}
+
+export function getConfig(key: string): string | null {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | null;
+  return row?.value ?? null;
+}
+
+export function setConfig(key: string, value: string): void {
+  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, value);
 }

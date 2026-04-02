@@ -7,6 +7,7 @@ async function toggleRead(id) {
   btn.textContent = isRead ? '\u2713' : '';
   btn.title = isRead ? 'Mark unread' : 'Mark read';
   updateUnreadCount();
+  applyFilters();
 }
 
 async function markRead(id) {
@@ -19,12 +20,28 @@ async function markRead(id) {
     btn.textContent = '\u2713';
     btn.title = 'Mark unread';
     updateUnreadCount();
+    applyFilters();
   }
 }
 
 function updateUnreadCount() {
   const unread = document.querySelectorAll('.card:not(.read)').length;
   document.getElementById('unread-count').textContent = unread;
+}
+
+function updateTocCounts() {
+  document.querySelectorAll('.toc-link').forEach(function(link) {
+    var href = link.getAttribute('href');
+    if (!href) return;
+    var sectionId = href.split('#')[1];
+    var section = document.getElementById(sectionId);
+    var countEl = link.querySelector('.toc-count');
+    if (section && countEl) {
+      var visible = section.querySelectorAll('.card:not([style*="display: none"])').length;
+      countEl.textContent = visible;
+      link.style.display = visible ? '' : 'none';
+    }
+  });
 }
 
 // Theme management
@@ -102,6 +119,7 @@ function applyFilters() {
     applyFilters();
     return;
   }
+  updateTocCounts();
   updateURL();
 }
 
@@ -162,6 +180,7 @@ async function dismissArticle(id) {
       if (!visible) section.style.display = 'none';
     }
     updateUnreadCount();
+    updateTocCounts();
   }
 }
 
@@ -179,6 +198,7 @@ async function skipSectionAll(btn) {
   const visible = section.querySelectorAll('.card:not([style*="display: none"])').length;
   if (!visible) section.style.display = 'none';
   updateUnreadCount();
+  updateTocCounts();
 }
 
 async function skipCluster(btn, ids) {
@@ -211,30 +231,79 @@ function setSort(sort) {
   location.href = qs ? '?' + qs : '/';
 }
 
-// --- Actions (Fetch / Curate / Briefing) ---
-async function runAction(action) {
-  var btn = document.getElementById('btn-' + action);
+// --- Feed management ---
+async function removeFeed(id) {
+  if (!confirm('Remove this feed and all its articles?')) return;
+  await fetch('/api/feeds/' + id, { method: 'DELETE' });
+  var card = document.querySelector('[data-feed-id="' + id + '"]');
+  if (card) card.remove();
+}
+
+// --- Language setting ---
+async function setLanguage(lang) {
+  var res = await fetch('/api/config/language', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ language: lang })
+  });
+  if (res.ok) {
+    var banner = document.getElementById('lang-banner');
+    if (banner) banner.style.display = 'none';
+    location.reload();
+  }
+}
+
+// --- SSE stream reader helper ---
+async function readSSE(res, onMessage, onDone, onError) {
+  var reader = res.body.getReader();
+  var decoder = new TextDecoder();
+  var buffer = '';
+  while (true) {
+    var result = await reader.read();
+    if (result.done) break;
+    buffer += decoder.decode(result.value, { stream: true });
+    var lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('data: ')) {
+        try {
+          var event = JSON.parse(lines[i].slice(6));
+          if (event.error) { onError(event.error); return; }
+          if (event.done) { onDone(event); return; }
+          if (event.message) onMessage(event.message);
+        } catch(e) {}
+      }
+    }
+  }
+}
+
+// --- Update: Fetch → Curate → Briefing (SSE) ---
+async function runUpdate() {
+  var btn = document.getElementById('btn-update');
   var status = document.getElementById('action-status');
-  var labels = { fetch: 'Fetching feeds...', curate: 'AI curating...', briefing: 'Generating briefing...' };
-  var endpoints = { fetch: '/api/fetch', curate: '/api/curate', briefing: '/api/briefing/generate' };
 
   btn.disabled = true;
-  status.textContent = labels[action] || 'Running...';
+  status.textContent = 'Updating...';
   status.className = 'action-status running';
 
   try {
-    var res = await fetch(endpoints[action], { method: 'POST' });
-    var data = await res.json();
-    if (action === 'fetch') {
-      status.textContent = data.newArticles + ' new article(s) fetched.';
-    } else if (action === 'curate') {
-      status.textContent = data.curated + ' article(s) curated.';
-    } else {
-      status.textContent = data.ok ? 'Briefing generated.' : 'No articles for briefing.';
-    }
-    status.className = 'action-status done';
-    // Reload page after a short delay to show updated data
-    setTimeout(function() { location.reload(); }, 1500);
+    var res = await fetch('/api/update', { method: 'POST' });
+    await readSSE(res,
+      function(msg) { status.textContent = msg; },
+      function(event) {
+        var parts = [];
+        if (event.newArticles) parts.push(event.newArticles + ' new');
+        if (event.curated) parts.push(event.curated + ' curated');
+        if (event.briefing) parts.push('briefing ready');
+        status.textContent = parts.length > 0 ? 'Done: ' + parts.join(', ') + '.' : 'Up to date.';
+        status.className = 'action-status done';
+        setTimeout(function() { location.reload(); }, 1500);
+      },
+      function(err) {
+        status.textContent = 'Error: ' + err;
+        status.className = 'action-status error';
+      }
+    );
   } catch (e) {
     status.textContent = 'Error: ' + e.message;
     status.className = 'action-status error';
@@ -243,39 +312,76 @@ async function runAction(action) {
   }
 }
 
-// --- Discover Feeds ---
+// --- Discover Feeds (SSE + main content) ---
 async function discoverFeeds() {
-  const input = document.getElementById('discover-topic');
-  const btn = document.getElementById('discover-btn');
-  const results = document.getElementById('discover-results');
-  const topic = input.value.trim();
+  var input = document.getElementById('discover-topic');
+  var btn = document.getElementById('discover-btn');
+  var results = document.getElementById('discover-results');
+  var topic = input.value.trim();
   if (!topic) return;
 
   btn.disabled = true;
   btn.textContent = 'Searching...';
+  results.style.display = '';
   results.innerHTML = '<div class="discover-loading">Asking AI to find feeds...</div>';
 
   try {
-    const res = await fetch('/api/discover', {
+    var res = await fetch('/api/discover', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic })
     });
-    const data = await res.json();
+    var feeds = null;
+    await readSSE(res,
+      function(msg) {
+        results.innerHTML = '<div class="discover-loading">' + escapeText(msg) + '</div>';
+      },
+      function(event) { feeds = event.feeds || []; },
+      function(err) {
+        results.innerHTML = '<div class="discover-empty">Error: ' + escapeText(err) + '</div>';
+      }
+    );
 
-    if (!data.feeds || data.feeds.length === 0) {
+    if (!feeds || feeds.length === 0) {
       results.innerHTML = '<div class="discover-empty">No feeds found.</div>';
       return;
     }
 
-    results.innerHTML = data.feeds.map((f, i) =>
-      '<div class="discover-item" id="df-' + i + '">' +
-        '<div class="discover-item-title">' + escapeText(f.title) + '</div>' +
-        '<div class="discover-item-url">' + escapeText(f.url) + '</div>' +
-        '<div class="discover-item-desc">' + escapeText(f.description) + '</div>' +
-        '<button class="discover-add-btn" onclick="registerFeed(' + i + ', \'' + escapeAttr(f.url) + '\', \'' + escapeAttr(topic) + '\')">Add</button>' +
-      '</div>'
-    ).join('');
+    var feedItems = feeds.map(function(f, i) {
+      return '<div class="discover-item" id="df-' + i + '">' +
+        '<div class="discover-item-info">' +
+          '<div class="discover-item-title">' + escapeText(f.title) + '</div>' +
+          '<div class="discover-item-url">' + escapeText(f.url) + '</div>' +
+          '<div class="discover-item-desc">' + escapeText(f.description) + '</div>' +
+        '</div>' +
+        '<button class="discover-add-btn" data-idx="' + i + '">Add</button>' +
+      '</div>';
+    }).join('');
+
+    // Store feed data for event handlers
+    window._discoverFeeds = feeds;
+    window._discoverTopic = topic;
+
+    results.innerHTML =
+      '<div class="discover-header">' +
+        '<h2>Feeds for \u201c' + escapeText(topic) + '\u201d</h2>' +
+        '<div class="discover-actions">' +
+          '<button id="register-all-btn" class="action-btn">Register All</button>' +
+          '<button class="discover-close-btn">\u2715</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="discover-list">' + feedItems + '</div>';
+
+    // Bind events via delegation instead of inline onclick
+    results.querySelectorAll('.discover-add-btn').forEach(function(b) {
+      b.addEventListener('click', function() {
+        var idx = Number(b.dataset.idx);
+        registerFeed(idx, window._discoverFeeds[idx].url, window._discoverTopic);
+      });
+    });
+    var regAllBtn = document.getElementById('register-all-btn');
+    if (regAllBtn) regAllBtn.addEventListener('click', function() { registerAllFeeds(window._discoverTopic); });
+    results.querySelector('.discover-close-btn').addEventListener('click', closeDiscoverResults);
   } catch (e) {
     results.innerHTML = '<div class="discover-empty">Error: ' + e.message + '</div>';
   } finally {
@@ -285,19 +391,59 @@ async function discoverFeeds() {
 }
 
 async function registerFeed(idx, url, category) {
-  const item = document.getElementById('df-' + idx);
-  const btn = item.querySelector('.discover-add-btn');
+  var item = document.getElementById('df-' + idx);
+  var btn = item.querySelector('.discover-add-btn');
   btn.disabled = true;
   btn.textContent = 'Adding...';
-
-  const res = await fetch('/api/discover/register', {
+  var res = await fetch('/api/discover/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, category })
+    body: JSON.stringify({ url: url, category: category })
   });
-  const data = await res.json();
+  var data = await res.json();
   btn.textContent = data.added ? 'Added!' : 'Already exists';
   btn.classList.add('done');
+}
+
+async function registerAllFeeds(topic) {
+  var btn = document.getElementById('register-all-btn');
+  var items = document.querySelectorAll('.discover-item');
+  var toRegister = [];
+  items.forEach(function(item) {
+    var addBtn = item.querySelector('.discover-add-btn');
+    if (!addBtn.classList.contains('done')) {
+      toRegister.push({ item: item, btn: addBtn, url: item.querySelector('.discover-item-url').textContent });
+    }
+  });
+  if (toRegister.length === 0) return;
+  btn.disabled = true;
+  btn.textContent = 'Registering...';
+  var added = 0;
+  for (var k = 0; k < toRegister.length; k++) {
+    var entry = toRegister[k];
+    entry.btn.disabled = true;
+    entry.btn.textContent = 'Adding...';
+    try {
+      var res = await fetch('/api/discover/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: entry.url, category: topic })
+      });
+      var data = await res.json();
+      entry.btn.textContent = data.added ? 'Added!' : 'Already exists';
+      entry.btn.classList.add('done');
+      if (data.added) added++;
+    } catch (e) {
+      entry.btn.textContent = 'Error';
+    }
+  }
+  btn.textContent = added + ' feed(s) registered';
+}
+
+function closeDiscoverResults() {
+  var results = document.getElementById('discover-results');
+  results.style.display = 'none';
+  results.innerHTML = '';
 }
 
 function escapeText(s) {
@@ -307,7 +453,7 @@ function escapeText(s) {
 }
 
 function escapeAttr(s) {
-  return s.replace(/'/g, "\\'").replace(/"/g, '\\"');
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // Restore filters on load

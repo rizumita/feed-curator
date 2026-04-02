@@ -1,9 +1,7 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { Command } from "commander";
-import { db } from "./db";
-import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle, updateFeedCategory } from "./feed";
-import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticle, dismissArticles, getAutoArchiveDays, runAutoArchive, saveBriefing, getBriefing } from "./article";
-import { parseFeed } from "./rss";
+import { addFeed, listFeeds, updateFeedCategory, fetchAllFeeds } from "./feed";
+import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticles, getAutoArchiveDays, runAutoArchive, saveBriefing, getBriefing, getConfig, setConfig } from "./article";
 import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
 import { aiCurate, aiBriefing } from "./ai";
@@ -27,7 +25,12 @@ program
       console.error("Error: Feed URL must start with http:// or https://");
       return;
     }
-    addFeed(url, undefined, opts.category);
+    const added = addFeed(url, undefined, opts.category);
+    if (added) {
+      console.log(`Added feed: ${url}`);
+    } else {
+      console.log(`Feed already exists: ${url}`);
+    }
   });
 
 // feed list
@@ -52,51 +55,7 @@ program
   .command("fetch")
   .description("Fetch new articles from all registered feeds")
   .action(async () => {
-    const feeds = getAllFeeds();
-    if (feeds.length === 0) {
-      console.log("No feeds registered. Use 'feed add <url>' first.");
-      return;
-    }
-
-    let totalNew = 0;
-    for (const feed of feeds) {
-      try {
-        const response = await fetch(feed.url);
-        if (!response.ok) {
-          console.error(`Failed to fetch ${feed.url}: ${response.status}`);
-          continue;
-        }
-        const contentLength = Number(response.headers.get("content-length") || 0);
-        if (contentLength > 10 * 1024 * 1024) {
-          console.warn(`Skipping ${feed.url}: response too large (${contentLength} bytes)`);
-          continue;
-        }
-        const xml = await response.text();
-        const { title, items } = parseFeed(xml);
-
-        if (title) updateFeedTitle(feed.id, title);
-
-        let newCount = 0;
-        for (const item of items) {
-          if (!item.url) continue;
-          const added = addArticle(
-            item.url,
-            item.title,
-            item.content,
-            feed.id,
-            item.publishedAt ?? undefined
-          );
-          if (added) newCount++;
-        }
-
-        updateFeedFetchedAt(feed.id);
-        console.log(`${feed.title ?? feed.url}: ${newCount} new articles (${items.length} total)`);
-        totalNew += newCount;
-      } catch (err) {
-        console.error(`Error fetching ${feed.url}:`, err);
-      }
-    }
-    console.log(`\nTotal: ${totalNew} new articles added.`);
+    await fetchAllFeeds({ verbose: true });
   });
 
 // feed add-article <url>
@@ -281,14 +240,12 @@ program
   .argument("[value]", "Config value to set")
   .action((key: string, value?: string) => {
     if (value !== undefined) {
-      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, value);
+      setConfig(key, value);
       console.log(`Set ${key} = ${value}`);
     } else {
-      const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
-        | { value: string }
-        | null;
-      if (row) {
-        console.log(row.value);
+      const result = getConfig(key);
+      if (result !== null) {
+        console.log(result);
       } else {
         console.log(`(not set)`);
       }
@@ -336,40 +293,7 @@ program
     // 1. Fetch
     if (opts.fetch) {
       console.log("\n=== Fetching feeds ===");
-      const feeds = getAllFeeds();
-      if (feeds.length === 0) {
-        console.log("No feeds registered. Use 'feed add <url>' first.");
-      } else {
-        let totalNew = 0;
-        for (const feed of feeds) {
-          try {
-            const response = await fetch(feed.url);
-            if (!response.ok) {
-              console.error(`Failed to fetch ${feed.url}: ${response.status}`);
-              continue;
-            }
-            const contentLength = Number(response.headers.get("content-length") || 0);
-            if (contentLength > 10 * 1024 * 1024) {
-              console.warn(`Skipping ${feed.url}: response too large`);
-              continue;
-            }
-            const xml = await response.text();
-            const { title, items } = parseFeed(xml);
-            if (title) updateFeedTitle(feed.id, title);
-            let newCount = 0;
-            for (const item of items) {
-              if (!item.url) continue;
-              if (addArticle(item.url, item.title, item.content, feed.id, item.publishedAt ?? undefined)) newCount++;
-            }
-            updateFeedFetchedAt(feed.id);
-            console.log(`${feed.title ?? feed.url}: ${newCount} new`);
-            totalNew += newCount;
-          } catch (err) {
-            console.error(`Error fetching ${feed.url}:`, err);
-          }
-        }
-        console.log(`Total: ${totalNew} new articles.`);
-      }
+      await fetchAllFeeds({ verbose: true });
     }
 
     // 2. AI Curate

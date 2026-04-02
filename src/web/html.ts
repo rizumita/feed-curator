@@ -1,6 +1,5 @@
-import type { Article, Briefing, BriefingCluster } from "../types";
-
-type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
+import type { Briefing, BriefingCluster } from "../types";
+import type { ArticleWithFeed } from "../article";
 
 interface Tier {
   id: string;
@@ -38,6 +37,14 @@ export function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
+}
+
+export function sanitizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("/") || trimmed.startsWith("#")) {
+    return escapeHtml(trimmed);
+  }
+  return "#";
 }
 
 export function getAllCategories(articles: ArticleWithFeed[]): string[] {
@@ -82,7 +89,7 @@ function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): 
         <button class="skip-btn" onclick="dismissArticle(${a.id})" title="Skip">&#x2715;</button>` : ""}
         <div class="card-body">
           <h3 class="card-title">
-            <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" onclick="markRead(${a.id})">${title}</a>
+            <a href="${sanitizeUrl(a.url)}" target="_blank" rel="noopener" onclick="markRead(${a.id})">${title}</a>
           </h3>
           <p class="card-summary">${summary}</p>
           <div class="card-meta">
@@ -98,6 +105,40 @@ function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): 
         </div>
       </div>
     </article>`;
+}
+
+function renderFeedsView(feeds: Feed[]): string {
+  if (feeds.length === 0) {
+    return `<div class="empty">
+      <h2>No feeds registered</h2>
+      <p>Use the search box in the sidebar to discover and add feeds.</p>
+    </div>`;
+  }
+
+  const byCategory = new Map<string, Feed[]>();
+  for (const f of feeds) {
+    const cat = f.category ?? "Uncategorized";
+    const list = byCategory.get(cat) ?? [];
+    list.push(f);
+    byCategory.set(cat, list);
+  }
+
+  return `<h1 class="feeds-title">Registered Feeds <span class="feeds-count">${feeds.length}</span></h1>
+    ${[...byCategory.entries()].map(([cat, catFeeds]) => `
+      <section class="feeds-category">
+        <h2 class="feeds-category-name">${escapeHtml(cat)} <span class="feeds-count">${catFeeds.length}</span></h2>
+        ${catFeeds.map(f => `
+          <div class="feed-card" data-feed-id="${f.id}">
+            <div class="feed-card-info">
+              <div class="feed-card-title">${escapeHtml(f.title ?? "(no title)")}</div>
+              <div class="feed-card-url">${escapeHtml(f.url)}</div>
+              ${f.last_fetched_at ? `<div class="feed-card-meta">Last fetched: ${formatDate(f.last_fetched_at)}</div>` : ""}
+            </div>
+            <button class="feed-remove-btn" onclick="removeFeed(${f.id})" title="Remove feed">&times;</button>
+          </div>
+        `).join("\n")}
+      </section>
+    `).join("\n")}`;
 }
 
 interface Stats {
@@ -133,12 +174,16 @@ function renderBriefingView(briefing: Briefing, articles: ArticleWithFeed[]): st
   }).join("\n");
 }
 
+import type { Feed } from "../types";
+
 export function renderPage(
   articles: ArticleWithFeed[],
   stats: Stats,
   sort: "newest" | "score" = "newest",
-  view: "briefing" | "all" | "archive" = "briefing",
+  view: "briefing" | "all" | "archive" | "feeds" = "briefing",
   briefing?: Briefing | null,
+  language?: string | null,
+  feeds?: Feed[],
 ): string {
   const now = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -220,11 +265,13 @@ export function renderPage(
       <div class="sidebar-section">
         <div class="sidebar-heading">Actions</div>
         <div class="action-buttons">
-          <button class="action-btn" onclick="runAction('fetch')" id="btn-fetch">Fetch Feeds</button>
-          <button class="action-btn" onclick="runAction('curate')" id="btn-curate">AI Curate</button>
-          <button class="action-btn" onclick="runAction('briefing')" id="btn-briefing">Generate Briefing</button>
+          <button class="action-btn" onclick="runUpdate()" id="btn-update">Update</button>
         </div>
         <div id="action-status" class="action-status"></div>
+        <div class="discover-form">
+          <input type="text" id="discover-topic" placeholder="Discover feeds by topic..." class="discover-input" />
+          <button onclick="discoverFeeds()" id="discover-btn" class="discover-btn">Search</button>
+        </div>
       </div>
 
       <div class="sidebar-section">
@@ -233,6 +280,7 @@ export function renderPage(
           <button class="filter-btn${view === "briefing" ? " active" : ""}" onclick="setView('briefing')">Briefing</button>
           <button class="filter-btn${view === "all" ? " active" : ""}" onclick="setView('all')">All</button>
           <button class="filter-btn${view === "archive" ? " active" : ""}" onclick="setView('archive')">Archive</button>
+          <button class="filter-btn${view === "feeds" ? " active" : ""}" onclick="setView('feeds')">Feeds</button>
         </div>
       </div>
 
@@ -271,15 +319,6 @@ export function renderPage(
         </div>
       </div>` : ""}
 
-      <div class="sidebar-section">
-        <div class="sidebar-heading">Discover Feeds</div>
-        <div class="discover-form">
-          <input type="text" id="discover-topic" placeholder="Topic (e.g. AI, Rust...)" class="discover-input" />
-          <button onclick="discoverFeeds()" id="discover-btn" class="discover-btn">Search</button>
-        </div>
-        <div id="discover-results"></div>
-      </div>
-
       <div class="sidebar-section toc">
         <div class="sidebar-heading">Sections</div>
         <div class="filter-list">
@@ -289,22 +328,55 @@ export function renderPage(
     </aside>
 
     <main class="main">
+      ${!language ? `
+      <div class="lang-banner" id="lang-banner">
+        <p>Select your preferred language for article summaries and digests:</p>
+        <div class="lang-options">
+          <button onclick="setLanguage('ja')">日本語</button>
+          <button onclick="setLanguage('en')">English</button>
+          <button onclick="setLanguage('zh')">中文</button>
+          <button onclick="setLanguage('ko')">한국어</button>
+          <button onclick="setLanguage('es')">Espa\u00f1ol</button>
+          <button onclick="setLanguage('fr')">Fran\u00e7ais</button>
+          <button onclick="setLanguage('de')">Deutsch</button>
+        </div>
+      </div>` : ""}
+      <div id="discover-results" class="discover-results-main" style="display:none"></div>
       ${
-        view === "briefing" && briefing
-          ? `<div class="briefing-header">
-               <h1>Today's Briefing</h1>
-               <span class="briefing-date">${now}</span>
-             </div>
-             ${renderBriefingView(briefing, articles)}
-             <div class="briefing-footer">
-               <a href="?view=all" class="see-all-link">See all ${stats.unread} unread articles &rarr;</a>
-             </div>`
-          : articles.length > 0
-            ? sectionHtml
-            : `<div class="empty">
-                <h2>No curated articles yet</h2>
-                <p>Run /curate to score and summarize your articles.</p>
-              </div>`
+        // Onboarding: no feeds registered → show discover UI
+        stats.feeds === 0 && view !== "feeds"
+          ? `<div class="onboarding">
+              <h1>Welcome to Feed Curator</h1>
+              <p>Get started by finding feeds to follow.</p>
+              <div class="onboarding-search">
+                <input type="text" id="onboard-topic" placeholder="Enter a topic (e.g. AI, Rust, TypeScript...)" class="onboarding-input" />
+                <button onclick="document.getElementById('discover-topic').value=document.getElementById('onboard-topic').value;discoverFeeds()" class="onboarding-btn">Search Feeds</button>
+              </div>
+            </div>`
+        // Onboarding: feeds exist but no curated articles → prompt to update
+        : stats.feeds > 0 && stats.curated === 0 && view === "briefing"
+          ? `<div class="onboarding">
+              <h1>Feeds Ready</h1>
+              <p>${stats.feeds} feed(s) registered. Fetch articles and let AI curate them.</p>
+              <button onclick="runUpdate()" id="btn-update-onboard" class="onboarding-btn">Update Now</button>
+            </div>`
+        : view === "feeds"
+          ? renderFeedsView(feeds ?? [])
+          : view === "briefing" && briefing
+            ? `<div class="briefing-header">
+                 <h1>Today's Briefing</h1>
+                 <span class="briefing-date">${now}</span>
+               </div>
+               ${renderBriefingView(briefing, articles)}
+               <div class="briefing-footer">
+                 <a href="?view=all" class="see-all-link">See all ${stats.unread} unread articles &rarr;</a>
+               </div>`
+            : articles.length > 0
+              ? sectionHtml
+              : `<div class="empty">
+                  <h2>No curated articles yet</h2>
+                  <p>Click <strong>Update</strong> in the sidebar to fetch and curate articles.</p>
+                </div>`
       }
       <footer>Feed Curator &mdash; AI-powered curation by Claude Code</footer>
     </main>

@@ -7,6 +7,13 @@ interface TagStat {
   readRate: number;
 }
 
+interface ActionStat {
+  tag: string;
+  total: number;
+  count: number;
+  rate: number;
+}
+
 interface FeedStat {
   feed_id: number;
   title: string;
@@ -33,7 +40,7 @@ export interface UserProfile {
   scoreBands: ScoreBand[];
   totalDismissed: number;
   dismissRate: number;
-  dismissedTags: TagStat[];
+  dismissedTags: ActionStat[];
 }
 
 export function generateProfile(): UserProfile {
@@ -87,10 +94,10 @@ export function generateProfile(): UserProfile {
     }
   }
 
-  const dismissedTags: TagStat[] = [...dismissTagMap.entries()]
-    .map(([tag, s]) => ({ tag, total: s.total, read: s.dismissed, readRate: s.total > 0 ? s.dismissed / s.total : 0 }))
-    .filter((t) => t.readRate > dismissRate && t.total >= 3)
-    .sort((a, b) => b.readRate - a.readRate);
+  const dismissedTags: ActionStat[] = [...dismissTagMap.entries()]
+    .map(([tag, s]) => ({ tag, total: s.total, count: s.dismissed, rate: s.total > 0 ? s.dismissed / s.total : 0 }))
+    .filter((t) => t.rate > dismissRate && t.total >= 3)
+    .sort((a, b) => b.rate - a.rate);
 
   // Feed stats
   const feedMap = new Map<number, { title: string; category: string | null; total: number; read: number }>();
@@ -151,7 +158,7 @@ export function formatProfile(p: UserProfile): string {
   if (p.dismissedTags.length > 0) {
     out += "\nFrequently Dismissed Tags:\n";
     for (const t of p.dismissedTags) {
-      out += `  ${t.tag}: ${t.read}/${t.total} dismissed (${(t.readRate * 100).toFixed(0)}%)\n`;
+      out += `  ${t.tag}: ${t.count}/${t.total} dismissed (${(t.rate * 100).toFixed(0)}%)\n`;
     }
   }
 

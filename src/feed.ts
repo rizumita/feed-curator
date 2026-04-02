@@ -1,15 +1,13 @@
 import { db } from "./db";
 import type { Feed } from "./types";
+import { addArticle } from "./article";
+import { parseFeed } from "./rss";
 
-export function addFeed(url: string, title?: string, category?: string): void {
+export function addFeed(url: string, title?: string, category?: string): boolean {
   const result = db.prepare(
     "INSERT OR IGNORE INTO feeds (url, title, category) VALUES (?, ?, ?)"
   ).run(url, title ?? null, category ?? null);
-  if (result.changes > 0) {
-    console.log(`Added feed: ${url}`);
-  } else {
-    console.log(`Feed already exists: ${url}`);
-  }
+  return result.changes > 0;
 }
 
 export function listFeeds(): Feed[] {
@@ -30,4 +28,62 @@ export function updateFeedTitle(feedId: number, title: string): void {
 
 export function updateFeedCategory(feedId: number, category: string): void {
   db.prepare("UPDATE feeds SET category = ? WHERE id = ?").run(category, feedId);
+}
+
+export function removeFeed(feedId: number): void {
+  db.prepare("DELETE FROM articles WHERE feed_id = ?").run(feedId);
+  db.prepare("DELETE FROM feeds WHERE id = ?").run(feedId);
+}
+
+export async function fetchAllFeeds(opts?: { verbose?: boolean; onProgress?: (msg: string) => void }): Promise<number> {
+  const verbose = opts?.verbose ?? false;
+  const notify = (msg: string) => { if (verbose) console.log(msg); opts?.onProgress?.(msg); };
+  const feeds = getAllFeeds();
+  if (feeds.length === 0) {
+    notify("No feeds registered.");
+    return 0;
+  }
+
+  let totalNew = 0;
+  for (let i = 0; i < feeds.length; i++) {
+    const feed = feeds[i];
+    notify(`Fetching feed ${i + 1}/${feeds.length}: ${feed.title ?? feed.url}...`);
+    try {
+      const response = await fetch(feed.url);
+      if (!response.ok) {
+        notify(`Failed to fetch ${feed.url}: ${response.status}`);
+        continue;
+      }
+      const contentLength = Number(response.headers.get("content-length") || 0);
+      if (contentLength > 10 * 1024 * 1024) {
+        notify(`Skipping ${feed.url}: response too large`);
+        continue;
+      }
+      const xml = await response.text();
+      const { title, items } = parseFeed(xml);
+
+      if (title) updateFeedTitle(feed.id, title);
+
+      let newCount = 0;
+      for (const item of items) {
+        if (!item.url) continue;
+        const added = addArticle(
+          item.url,
+          item.title,
+          item.content,
+          feed.id,
+          item.publishedAt ?? undefined
+        );
+        if (added) newCount++;
+      }
+
+      updateFeedFetchedAt(feed.id);
+      notify(`${feed.title ?? feed.url}: ${newCount} new articles (${items.length} total)`);
+      totalNew += newCount;
+    } catch (err) {
+      notify(`Error fetching ${feed.url}`);
+    }
+  }
+  notify(`Total: ${totalNew} new articles added.`);
+  return totalNew;
 }

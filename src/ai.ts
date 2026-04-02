@@ -1,35 +1,40 @@
-import { spawnSync } from "child_process";
-import { db } from "./db";
-import { listArticles, updateArticleCuration, saveBriefing } from "./article";
-import { addFeed } from "./feed";
+import { spawn } from "child_process";
+import { listArticles, updateArticleCuration, saveBriefing, getConfig } from "./article";
 import { generateProfile, profileForPrompt } from "./profile";
-import type { Article } from "./types";
 
-function getConfig(key: string): string | null {
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | null;
-  return row?.value ?? null;
+function extractJson(response: string, type: "array" | "object"): string | null {
+  const pattern = type === "array" ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
+  const match = response.match(pattern);
+  return match?.[0] ?? null;
 }
 
-function callClaude(prompt: string): string | null {
-  const result = spawnSync("claude", ["-p", prompt], {
-    encoding: "utf-8",
-    timeout: 300_000,
-    maxBuffer: 10 * 1024 * 1024,
+function callClaude(prompt: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const proc = spawn("claude", ["-p", prompt]);
+    let stdout = "";
+    let stderr = "";
+    proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    const timer = setTimeout(() => { proc.kill(); resolve(null); }, 300_000);
+    proc.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0) {
+        console.error("claude CLI exited with status", code);
+        if (stderr) console.error(stderr);
+        resolve(null);
+        return;
+      }
+      resolve(stdout.trim());
+    });
+    proc.on("error", (err) => {
+      clearTimeout(timer);
+      console.error("Failed to run claude CLI:", err.message);
+      resolve(null);
+    });
   });
-
-  if (result.error) {
-    console.error("Failed to run claude CLI:", result.error.message);
-    return null;
-  }
-  if (result.status !== 0) {
-    console.error("claude CLI exited with status", result.status);
-    if (result.stderr) console.error(result.stderr);
-    return null;
-  }
-  return result.stdout.trim();
 }
 
-export async function aiCurate(): Promise<number> {
+export async function aiCurate(onProgress?: (msg: string) => void): Promise<number> {
   const articles = listArticles(true); // uncurated only
   if (articles.length === 0) {
     console.log("No uncurated articles.");
@@ -43,9 +48,11 @@ export async function aiCurate(): Promise<number> {
   // Process in batches to avoid token limits
   const batchSize = 10;
   let curated = 0;
+  const totalBatches = Math.ceil(articles.length / batchSize);
 
   for (let i = 0; i < articles.length; i += batchSize) {
     const batch = articles.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
     const articlesJson = batch.map(a => ({
       id: a.id,
       title: a.title,
@@ -70,22 +77,25 @@ Use these tag categories when applicable: agents, coding, llm, mcp, security, to
 Score based on: novelty, technical depth, practical utility, breadth of interest.
 Adjust scores using the user profile above.`;
 
-    console.log(`Curating batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(articles.length / batchSize)} (${batch.length} articles)...`);
+    const msg = `Curating batch ${batchNum}/${totalBatches} (${batch.length} articles)...`;
+    console.log(msg);
+    onProgress?.(msg);
 
-    const response = callClaude(prompt);
+    const response = await callClaude(prompt);
     if (!response) {
       console.error("Failed to get AI response for batch, skipping.");
+      onProgress?.(`Batch ${batchNum} failed, skipping.`);
       continue;
     }
 
     try {
       // Extract JSON from response (handle markdown code blocks)
-      const jsonMatch = response.match(/\[[\s\S]*\]/);
-      if (!jsonMatch) {
+      const json = extractJson(response, "array");
+      if (!json) {
         console.error("No JSON array found in response, skipping batch.");
         continue;
       }
-      const results = JSON.parse(jsonMatch[0]) as Array<{
+      const results = JSON.parse(json) as Array<{
         id: number;
         score: number;
         summary: string;
@@ -98,6 +108,7 @@ Adjust scores using the user profile above.`;
           curated++;
         }
       }
+      onProgress?.(`Batch ${batchNum} done: ${results.length} curated`);
     } catch (e) {
       console.error("Failed to parse AI response:", e);
     }
@@ -106,7 +117,7 @@ Adjust scores using the user profile above.`;
   return curated;
 }
 
-export async function aiBriefing(): Promise<boolean> {
+export async function aiBriefing(onProgress?: (msg: string) => void): Promise<boolean> {
   const language = getConfig("language") ?? "en";
   const profile = generateProfile();
   const profilePrompt = profileForPrompt(profile);
@@ -156,22 +167,25 @@ Respond with ONLY a JSON object (no markdown, no explanation):
 {"clusters":[{"topic":"...","summary":"...","article_ids":[...]}]}`;
 
   console.log("Generating briefing...");
-  const response = callClaude(prompt);
+  onProgress?.("Analyzing articles for briefing...");
+  const response = await callClaude(prompt);
   if (!response) {
     console.error("Failed to get AI response for briefing.");
     return false;
   }
 
   try {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    const json = extractJson(response, "object");
+    if (!json) {
       console.error("No JSON object found in response.");
       return false;
     }
-    const data = JSON.parse(jsonMatch[0]) as { clusters: Array<{ topic: string; summary: string; article_ids: number[] }> };
+    const data = JSON.parse(json) as { clusters: Array<{ topic: string; summary: string; article_ids: number[] }> };
     const today = new Date().toISOString().slice(0, 10);
     saveBriefing(today, data.clusters);
-    console.log(`Briefing saved: ${data.clusters.length} topic(s), ${data.clusters.reduce((n, c) => n + c.article_ids.length, 0)} articles.`);
+    const msg = `Briefing saved: ${data.clusters.length} topic(s), ${data.clusters.reduce((n, c) => n + c.article_ids.length, 0)} articles.`;
+    console.log(msg);
+    onProgress?.(msg);
     return true;
   } catch (e) {
     console.error("Failed to parse briefing response:", e);
@@ -185,7 +199,9 @@ export interface DiscoveredFeed {
   description: string;
 }
 
-export async function aiDiscoverFeeds(topic: string): Promise<DiscoveredFeed[]> {
+export async function aiDiscoverFeeds(topic: string, onProgress?: (msg: string) => void): Promise<DiscoveredFeed[]> {
+  onProgress?.(`Searching feeds for "${topic}"...`);
+
   const prompt = `You are an RSS feed discovery assistant. Find RSS/Atom feeds related to this topic: "${topic}"
 
 Search for blogs, news sites, and publications about this topic. For each feed found, verify it's a real RSS/Atom feed URL (ending in /feed, /rss, /atom.xml, /feed.xml, /rss.xml, /index.xml, or similar).
@@ -200,21 +216,16 @@ Guidelines:
 - Only include publicly accessible feeds (no auth required)
 - Make sure URLs are actual feed URLs, not regular web pages`;
 
-  const response = callClaude(prompt);
+  const response = await callClaude(prompt);
   if (!response) return [];
 
   try {
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return [];
-    return JSON.parse(jsonMatch[0]) as DiscoveredFeed[];
+    const json = extractJson(response, "array");
+    if (!json) return [];
+    const feeds = JSON.parse(json) as DiscoveredFeed[];
+    onProgress?.(`Found ${feeds.length} feed(s).`);
+    return feeds;
   } catch {
     return [];
   }
-}
-
-export function registerDiscoveredFeed(url: string, category?: string): boolean {
-  const result = db.prepare(
-    "INSERT OR IGNORE INTO feeds (url, category) VALUES (?, ?)"
-  ).run(url, category ?? null);
-  return result.changes > 0;
 }

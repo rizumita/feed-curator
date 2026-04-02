@@ -2,64 +2,12 @@ import { createServer } from "http";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { db } from "./db";
-import type { Article, Feed } from "./types";
 import { renderPage } from "./web/html";
-import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing } from "./article";
-import { aiDiscoverFeeds, registerDiscoveredFeed, aiCurate, aiBriefing } from "./ai";
-import { getAllFeeds, updateFeedFetchedAt, updateFeedTitle } from "./feed";
-import { addArticle } from "./article";
-import { parseFeed } from "./rss";
+import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing, getCuratedArticles, getActiveArticles, getStats, toggleRead, markAsRead, dismissArticle, dismissArticles, getConfig, setConfig } from "./article";
+import { aiDiscoverFeeds, aiCurate, aiBriefing } from "./ai";
+import { addFeed, fetchAllFeeds, listFeeds, removeFeed } from "./feed";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-
-type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
-
-function getCuratedArticles(sort: "newest" | "score" = "newest", view: "active" | "archive" = "active"): ArticleWithFeed[] {
-  const order = sort === "score" ? "a.score DESC" : "a.published_at DESC, a.fetched_at DESC";
-  const whereClause = view === "archive"
-    ? "WHERE a.curated_at IS NOT NULL AND (a.dismissed_at IS NOT NULL OR a.archived_at IS NOT NULL)"
-    : "WHERE a.curated_at IS NOT NULL AND a.dismissed_at IS NULL AND a.archived_at IS NULL";
-  return db
-    .prepare(
-      `SELECT a.*, f.title as feed_title, f.category
-       FROM articles a
-       LEFT JOIN feeds f ON a.feed_id = f.id
-       ${whereClause}
-       ORDER BY ${order}`
-    )
-    .all() as ArticleWithFeed[];
-}
-
-function getFeeds(): Feed[] {
-  return db.prepare("SELECT * FROM feeds ORDER BY created_at DESC").all() as Feed[];
-}
-
-function getStats(): { total: number; curated: number; unread: number; feeds: number; archived: number } {
-  const total = (db.prepare("SELECT COUNT(*) as n FROM articles").get() as any)?.n ?? 0;
-  const curated = (
-    db.prepare("SELECT COUNT(*) as n FROM articles WHERE curated_at IS NOT NULL").get() as any
-  ).n;
-  const unread = (
-    db.prepare("SELECT COUNT(*) as n FROM articles WHERE curated_at IS NOT NULL AND read_at IS NULL AND dismissed_at IS NULL AND archived_at IS NULL").get() as any
-  ).n;
-  const feeds = (db.prepare("SELECT COUNT(*) as n FROM feeds").get() as any)?.n ?? 0;
-  const archived = (
-    db.prepare("SELECT COUNT(*) as n FROM articles WHERE curated_at IS NOT NULL AND (dismissed_at IS NOT NULL OR archived_at IS NOT NULL)").get() as any
-  ).n;
-  return { total, curated, unread, feeds, archived };
-}
-
-function toggleRead(id: number): boolean {
-  const article = db.prepare("SELECT read_at FROM articles WHERE id = ?").get(id) as { read_at: string | null } | null;
-  if (!article) return false;
-  if (article.read_at) {
-    db.prepare("UPDATE articles SET read_at = NULL WHERE id = ?").run(id);
-  } else {
-    db.prepare("UPDATE articles SET read_at = datetime('now') WHERE id = ?").run(id);
-  }
-  return true;
-}
 
 function jsonResponse(res: import("http").ServerResponse, data: unknown, status = 200): void {
   const body = JSON.stringify(data);
@@ -76,7 +24,19 @@ function readBody(req: import("http").IncomingMessage): Promise<string> {
   });
 }
 
-export function startServer(port: number = 3000): void {
+function sseHandler(
+  res: import("http").ServerResponse,
+  action: (send: (msg: string) => void) => Promise<Record<string, unknown>>,
+): void {
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", "Connection": "keep-alive" });
+  const send = (msg: string) => { res.write(`data: ${JSON.stringify({ message: msg })}\n\n`); };
+  action(send)
+    .then((result) => { res.write(`data: ${JSON.stringify({ done: true, ...result })}\n\n`); })
+    .catch((e: unknown) => { const msg = e instanceof Error ? e.message : String(e); res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); })
+    .finally(() => { res.end(); });
+}
+
+export function startServer(port: number = 3000): import("http").Server {
   const stylesPath = join(__dirname, "web", "styles.css");
   const scriptsPath = join(__dirname, "web", "scripts.js");
 
@@ -105,14 +65,14 @@ export function startServer(port: number = 3000): void {
       }
 
       if (url.pathname === "/api/feeds") {
-        jsonResponse(res, getFeeds());
+        jsonResponse(res, listFeeds());
         return;
       }
 
       const readMatch = url.pathname.match(/^\/api\/read\/(\d+)$/);
       if (readMatch && method === "POST") {
-        toggleRead(Number(readMatch[1]));
-        jsonResponse(res, { ok: true });
+        const found = toggleRead(Number(readMatch[1]));
+        jsonResponse(res, { ok: found });
         return;
       }
 
@@ -129,10 +89,11 @@ export function startServer(port: number = 3000): void {
           jsonResponse(res, { error: "ids must be an array with at most 1000 elements" }, 400);
           return;
         }
-        for (const id of ids) {
-          db.prepare("UPDATE articles SET read_at = datetime('now') WHERE id = ? AND read_at IS NULL").run(id);
+        const validIds = ids.filter((id: unknown) => typeof id === "number" && Number.isInteger(id) && id > 0);
+        for (const id of validIds) {
+          markAsRead(id);
         }
-        jsonResponse(res, { ok: true, count: ids.length });
+        jsonResponse(res, { ok: true, count: validIds.length });
         return;
       }
 
@@ -147,7 +108,7 @@ export function startServer(port: number = 3000): void {
       // POST /api/dismiss/:id
       const dismissMatch = url.pathname.match(/^\/api\/dismiss\/(\d+)$/);
       if (dismissMatch && method === "POST") {
-        db.prepare("UPDATE articles SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL").run(Number(dismissMatch[1]));
+        dismissArticle(Number(dismissMatch[1]));
         jsonResponse(res, { ok: true });
         return;
       }
@@ -166,51 +127,79 @@ export function startServer(port: number = 3000): void {
           jsonResponse(res, { error: "ids must be an array with at most 1000 elements" }, 400);
           return;
         }
-        const placeholders = ids.map(() => "?").join(",");
-        db.prepare(`UPDATE articles SET dismissed_at = datetime('now') WHERE id IN (${placeholders}) AND dismissed_at IS NULL`).run(...ids);
-        jsonResponse(res, { ok: true, count: ids.length });
-        return;
-      }
-
-      // POST /api/fetch — fetch articles from all feeds
-      if (url.pathname === "/api/fetch" && method === "POST") {
-        const feeds = getAllFeeds();
-        let totalNew = 0;
-        for (const feed of feeds) {
-          try {
-            const response = await globalThis.fetch(feed.url);
-            if (!response.ok) continue;
-            const contentLength = Number(response.headers.get("content-length") || 0);
-            if (contentLength > 10 * 1024 * 1024) continue;
-            const xml = await response.text();
-            const { title, items } = parseFeed(xml);
-            if (title) updateFeedTitle(feed.id, title);
-            for (const item of items) {
-              if (!item.url) continue;
-              if (addArticle(item.url, item.title, item.content, feed.id, item.publishedAt ?? undefined)) totalNew++;
-            }
-            updateFeedFetchedAt(feed.id);
-          } catch { /* skip failed feeds */ }
+        const validIds = ids.filter((id: unknown) => typeof id === "number" && Number.isInteger(id) && id > 0);
+        if (validIds.length === 0) {
+          jsonResponse(res, { ok: true, count: 0 });
+          return;
         }
-        jsonResponse(res, { ok: true, newArticles: totalNew });
+        dismissArticles(validIds);
+        jsonResponse(res, { ok: true, count: validIds.length });
         return;
       }
 
-      // POST /api/curate — AI-curate uncurated articles
+      // POST /api/update — fetch → curate (new only) → briefing in sequence (SSE)
+      if (url.pathname === "/api/update" && method === "POST") {
+        sseHandler(res, async (send) => {
+          // 1. Fetch
+          send("Fetching feeds...");
+          const newArticles = await fetchAllFeeds({ onProgress: send });
+          send(`Fetched ${newArticles} new article(s).`);
+
+          // 2. Curate (only uncurated = newly fetched articles)
+          let curated = 0;
+          if (newArticles > 0) {
+            send("AI curating new articles...");
+            curated = await aiCurate(send);
+            send(`Curated ${curated} article(s).`);
+          } else {
+            send("No new articles to curate.");
+          }
+
+          // 3. Briefing
+          send("Generating briefing...");
+          const ok = await aiBriefing(send);
+
+          // 4. Auto-archive
+          const archiveDays = getAutoArchiveDays();
+          const archived = runAutoArchive(archiveDays);
+          if (archived > 0) send(`Auto-archived ${archived} old article(s).`);
+
+          return { newArticles, curated, briefing: ok };
+        });
+        return;
+      }
+
+      // POST /api/fetch — fetch only (SSE)
+      if (url.pathname === "/api/fetch" && method === "POST") {
+        sseHandler(res, async (send) => {
+          send("Starting feed fetch...");
+          const newArticles = await fetchAllFeeds({ onProgress: send });
+          return { newArticles };
+        });
+        return;
+      }
+
+      // POST /api/curate — AI-curate uncurated articles (SSE)
       if (url.pathname === "/api/curate" && method === "POST") {
-        const count = await aiCurate();
-        jsonResponse(res, { ok: true, curated: count });
+        sseHandler(res, async (send) => {
+          send("Starting AI curation...");
+          const curated = await aiCurate(send);
+          return { curated };
+        });
         return;
       }
 
-      // POST /api/briefing/generate — generate today's briefing
+      // POST /api/briefing/generate — generate today's briefing (SSE)
       if (url.pathname === "/api/briefing/generate" && method === "POST") {
-        const success = await aiBriefing();
-        jsonResponse(res, { ok: success });
+        sseHandler(res, async (send) => {
+          send("Starting briefing generation...");
+          const ok = await aiBriefing(send);
+          return { ok };
+        });
         return;
       }
 
-      // POST /api/discover — discover feeds by topic
+      // POST /api/discover — discover feeds by topic (SSE)
       if (url.pathname === "/api/discover" && method === "POST") {
         let body: any;
         try {
@@ -224,8 +213,10 @@ export function startServer(port: number = 3000): void {
           jsonResponse(res, { error: "topic is required" }, 400);
           return;
         }
-        const feeds = await aiDiscoverFeeds(topic.trim());
-        jsonResponse(res, { feeds });
+        sseHandler(res, async (send) => {
+          const feeds = await aiDiscoverFeeds(topic.trim(), send);
+          return { feeds };
+        });
         return;
       }
 
@@ -243,8 +234,40 @@ export function startServer(port: number = 3000): void {
           jsonResponse(res, { error: "url is required" }, 400);
           return;
         }
-        const added = registerDiscoveredFeed(feedUrl.trim(), typeof category === "string" ? category : undefined);
+        if (!/^https?:\/\//i.test(feedUrl.trim())) {
+          jsonResponse(res, { error: "url must start with http:// or https://" }, 400);
+          return;
+        }
+        const added = addFeed(feedUrl.trim(), undefined, typeof category === "string" ? category : undefined);
         jsonResponse(res, { ok: true, added });
+        return;
+      }
+
+      // POST /api/config/language — set language
+      if (url.pathname === "/api/config/language" && method === "POST") {
+        let body: any;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          jsonResponse(res, { error: "Invalid JSON" }, 400);
+          return;
+        }
+        const { language } = body as { language: unknown };
+        if (typeof language !== "string" || !language.trim()) {
+          jsonResponse(res, { error: "language is required" }, 400);
+          return;
+        }
+        setConfig("language", language.trim());
+        jsonResponse(res, { ok: true, language: language.trim() });
+        return;
+      }
+
+      // DELETE /api/feeds/:id — remove a feed
+      const feedDeleteMatch = url.pathname.match(/^\/api\/feeds\/(\d+)$/);
+      if (feedDeleteMatch && method === "DELETE") {
+        const feedId = Number(feedDeleteMatch[1]);
+        removeFeed(feedId);
+        jsonResponse(res, { ok: true });
         return;
       }
 
@@ -252,13 +275,19 @@ export function startServer(port: number = 3000): void {
         const archiveDays = getAutoArchiveDays();
         runAutoArchive(archiveDays);
         const sort = url.searchParams.get("sort") === "score" ? "score" : "newest";
-        const view = url.searchParams.get("view") === "archive" ? "archive" :
-                     url.searchParams.get("view") === "all" ? "all" : "briefing";
-        const articles = getCuratedArticles(sort, view === "archive" ? "archive" : "active");
+        const viewParam = url.searchParams.get("view");
+        const view = viewParam === "feeds" ? "feeds" :
+                     viewParam === "archive" ? "archive" :
+                     viewParam === "all" ? "all" : "briefing";
+        const articles = view === "feeds" ? []
+          : view === "all" ? getActiveArticles(sort)
+          : getCuratedArticles(sort, view === "archive" ? "archive" : "active");
         const stats = getStats();
         const briefing = view === "briefing" ? getTodayBriefing() : null;
         const effectiveView = (view === "briefing" && !briefing) ? "all" : view;
-        const html = renderPage(articles, stats, sort, effectiveView, briefing);
+        const language = getConfig("language");
+        const allFeeds = view === "feeds" ? listFeeds() : undefined;
+        const html = renderPage(articles, stats, sort, effectiveView, briefing, language, allFeeds);
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
           "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",
@@ -269,7 +298,7 @@ export function startServer(port: number = 3000): void {
         return;
       }
 
-      res.writeHead(404);
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Not Found");
     } catch (err) {
       console.error("Server error:", err);
@@ -281,4 +310,6 @@ export function startServer(port: number = 3000): void {
   server.listen(port, () => {
     console.log(`Feed Curator running at http://localhost:${port}`);
   });
+
+  return server;
 }

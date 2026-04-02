@@ -11,7 +11,8 @@
   "keywords": ["rss", "feed", "curation", "ai", "claude-code"],
   "type": "module",
   "scripts": {
-    "feed": "bun src/cli.ts"
+    "feed": "bun src/cli.ts",
+    "test": "DB_PATH=./data/test.db bun test"
   },
   "dependencies": {
     "commander": "^13.0.0",

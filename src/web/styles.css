@@ -247,6 +247,22 @@ body {
   color: var(--accent-light);
 }
 
+.skip-section-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.25rem 0.625rem;
+  color: var(--text-dim);
+  font-size: 0.6875rem;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.skip-section-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
 /* --- Cards --- */
 .card {
   background: var(--surface);
@@ -291,6 +307,30 @@ body {
 
 .read-btn:hover { border-color: var(--accent-light); color: var(--accent-light); }
 .read-btn.is-read { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.skip-btn {
+  flex-shrink: 0;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-top: 0.125rem;
+  background: none;
+  border: 1.5px solid var(--border-light);
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 0.6875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+  padding: 0;
+}
+
+.skip-btn:hover {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
 
 .card-body { flex: 1; min-width: 0; }
 
@@ -469,7 +509,7 @@ footer {
     border-bottom: 1px solid var(--border);
     padding: 1rem 1.25rem;
   }
-  .stats-grid { grid-template-columns: repeat(4, 1fr); }
+  .stats-grid { grid-template-columns: repeat(5, 1fr); }
   .sidebar-section.toc { display: none; }
   .main { padding: 1.25rem; }
   .score-ring { width: 2.25rem; height: 2.25rem; }

@@ -20,6 +20,8 @@ export interface Article {
   curated_at: string | null;
   read_at: string | null;
   tags: string | null;
+  dismissed_at: string | null;
+  archived_at: string | null;
 }
 
 export interface RssItem {

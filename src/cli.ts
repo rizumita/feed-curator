@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { db } from "./db";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle, updateFeedCategory } from "./feed";
-import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread } from "./article";
+import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticle, dismissArticles, getAutoArchiveDays, runAutoArchive } from "./article";
 import { parseFeed } from "./rss";
 import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
@@ -16,6 +16,10 @@ program
   .argument("<url>", "RSS feed URL")
   .option("-c, --category <category>", "Feed category")
   .action((url: string, opts: { category?: string }) => {
+    if (!/^https?:\/\//i.test(url)) {
+      console.error("Error: Feed URL must start with http:// or https://");
+      return;
+    }
     addFeed(url, undefined, opts.category);
   });
 
@@ -55,6 +59,11 @@ program
           console.error(`Failed to fetch ${feed.url}: ${response.status}`);
           continue;
         }
+        const contentLength = Number(response.headers.get("content-length") || 0);
+        if (contentLength > 10 * 1024 * 1024) {
+          console.warn(`Skipping ${feed.url}: response too large (${contentLength} bytes)`);
+          continue;
+        }
         const xml = await response.text();
         const { title, items } = parseFeed(xml);
 
@@ -68,7 +77,7 @@ program
             item.title,
             item.content,
             feed.id,
-            item.publishedAt
+            item.publishedAt ?? undefined
           );
           if (added) newCount++;
         }
@@ -96,6 +105,9 @@ program
     if (!title) {
       try {
         const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const contentLength = Number(response.headers.get("content-length") || 0);
+        if (contentLength > 10 * 1024 * 1024) throw new Error("Response too large");
         const html = await response.text();
         const match = html.match(/<title[^>]*>([^<]+)<\/title>/i);
         if (match) title = match[1].trim();
@@ -152,7 +164,17 @@ program
   .requiredOption("--summary <summary>", "Article summary")
   .option("--tags <tags>", "Comma-separated tags")
   .action((id: string, opts: { score: string; summary: string; tags?: string }) => {
-    updateArticleCuration(Number(id), Number(opts.score), opts.summary, opts.tags);
+    const numId = Number(id);
+    const numScore = Number(opts.score);
+    if (!Number.isInteger(numId) || numId <= 0) {
+      console.error("Error: id must be a positive integer.");
+      return;
+    }
+    if (isNaN(numScore) || numScore < 0.0 || numScore > 1.0) {
+      console.error("Error: score must be between 0.0 and 1.0.");
+      return;
+    }
+    updateArticleCuration(numId, numScore, opts.summary, opts.tags);
     console.log(`Updated article ${id}.`);
   });
 
@@ -189,6 +211,34 @@ program
       markAsUnread(Number(id));
     }
     console.log(`Marked ${ids.length} article(s) as unread.`);
+  });
+
+// feed dismiss <id...>
+program
+  .command("dismiss")
+  .description("Dismiss articles (skip without reading)")
+  .argument("<ids...>", "Article IDs")
+  .action((ids: string[]) => {
+    const numIds = ids.map(Number);
+    dismissArticles(numIds);
+    console.log(`Dismissed ${ids.length} article(s).`);
+  });
+
+// feed archive
+program
+  .command("archive")
+  .description("Run auto-archive on old unread articles")
+  .option("--run", "Execute auto-archive now")
+  .action((opts: { run?: boolean }) => {
+    if (opts.run) {
+      const days = getAutoArchiveDays();
+      const count = runAutoArchive(days);
+      console.log(`Archived ${count} article(s) older than ${days} days.`);
+    } else {
+      const days = getAutoArchiveDays();
+      console.log(`Auto-archive threshold: ${days} days`);
+      console.log(`Use --run to execute.`);
+    }
   });
 
 // feed categorize <feed-id> <category>
@@ -244,7 +294,12 @@ program
   .description("Start web UI server")
   .option("-p, --port <port>", "Port number", "3000")
   .action((opts: { port: string }) => {
-    startServer(Number(opts.port));
+    const port = Number(opts.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      console.error("Error: port must be an integer between 1 and 65535.");
+      return;
+    }
+    startServer(port);
   });
 
 program.parse();

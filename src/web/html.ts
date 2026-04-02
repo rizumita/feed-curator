@@ -17,11 +17,11 @@ const TIERS: Tier[] = [
   { id: "low-priority", label: "Low Priority", color: "#6b7280", min: 0, max: 0.5 },
 ];
 
-function getTier(score: number): Tier {
+export function getTier(score: number): Tier {
   return TIERS.find((t) => score >= t.min) ?? TIERS[TIERS.length - 1];
 }
 
-function formatDate(dateStr: string | null): string {
+export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
   try {
     const d = new Date(dateStr);
@@ -31,15 +31,16 @@ function formatDate(dateStr: string | null): string {
   }
 }
 
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
 }
 
-function getAllCategories(articles: ArticleWithFeed[]): string[] {
+export function getAllCategories(articles: ArticleWithFeed[]): string[] {
   const catSet = new Set<string>();
   for (const a of articles) {
     if (a.category) catSet.add(a.category);
@@ -47,7 +48,7 @@ function getAllCategories(articles: ArticleWithFeed[]): string[] {
   return [...catSet].sort();
 }
 
-function getAllTags(articles: ArticleWithFeed[]): string[] {
+export function getAllTags(articles: ArticleWithFeed[]): string[] {
   const tagSet = new Set<string>();
   for (const a of articles) {
     if (a.tags) {
@@ -60,7 +61,7 @@ function getAllTags(articles: ArticleWithFeed[]): string[] {
   return [...tagSet].sort();
 }
 
-function renderCard(a: ArticleWithFeed): string {
+function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): string {
   const score = a.score ?? 0;
   const tier = getTier(score);
   const title = escapeHtml(a.title ?? "(Untitled)");
@@ -77,7 +78,8 @@ function renderCard(a: ArticleWithFeed): string {
       <div class="card-row">
         <button class="read-btn${isRead ? " is-read" : ""}" onclick="toggleRead(${a.id})" title="${isRead ? "Mark unread" : "Mark read"}">
           ${isRead ? "✓" : ""}
-        </button>
+        </button>${view === "active" ? `
+        <button class="skip-btn" onclick="dismissArticle(${a.id})" title="Skip">&#x2715;</button>` : ""}
         <div class="card-body">
           <h3 class="card-title">
             <a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" onclick="markRead(${a.id})">${title}</a>
@@ -103,12 +105,14 @@ interface Stats {
   curated: number;
   unread: number;
   feeds: number;
+  archived: number;
 }
 
 export function renderPage(
   articles: ArticleWithFeed[],
   stats: Stats,
   sort: "newest" | "score" = "newest",
+  view: "active" | "archive" = "active",
 ): string {
   const now = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -137,9 +141,10 @@ export function renderPage(
           <span class="tier-bar" style="background:${s.tier.color}"></span>
           <h2>${s.tier.label}</h2>
           <span class="tier-count">${s.articles.length}</span>
-          <button class="mark-section-read" onclick="markSectionRead(this)" title="Mark all visible as read">Mark all read</button>
+          <button class="mark-section-read" onclick="markSectionRead(this)" title="Mark all visible as read">Mark all read</button>${view === "active" ? `
+          <button class="skip-section-btn" onclick="skipSectionAll(this)" title="Skip all visible">Skip all</button>` : ""}
         </div>
-        ${s.articles.map(renderCard).join("\n")}
+        ${s.articles.map(a => renderCard(a, view)).join("\n")}
       </section>`
     )
     .join("\n");
@@ -179,6 +184,18 @@ export function renderPage(
         <div class="stat-box">
           <div class="stat-val">${stats.feeds}</div>
           <div class="stat-lbl">Feeds</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-val">${stats.archived}</div>
+          <div class="stat-lbl">Archived</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">View</div>
+        <div class="filter-list" id="view-filters">
+          <button class="filter-btn${view === "active" ? " active" : ""}" onclick="setView('active')">Active</button>
+          <button class="filter-btn${view === "archive" ? " active" : ""}" onclick="setView('archive')">Archive</button>
         </div>
       </div>
 

@@ -65,7 +65,7 @@ export function parseFeed(xml: string): { title: string | null; items: RssItem[]
   return { title: null, items: [] };
 }
 
-function textOf(val: unknown): string {
+export function textOf(val: unknown): string {
   if (typeof val === "string") return val;
   if (typeof val === "number") return String(val);
   if (val && typeof val === "object") {
@@ -74,11 +74,11 @@ function textOf(val: unknown): string {
   return "";
 }
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return decodeEntities(html.replace(/<[^>]*>/g, "")).trim();
 }
 
-function decodeEntities(text: string): string {
+export function decodeEntities(text: string): string {
   return text
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")

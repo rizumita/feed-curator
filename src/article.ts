@@ -58,3 +58,39 @@ export function markAsRead(id: number): void {
 export function markAsUnread(id: number): void {
   db.run("UPDATE articles SET read_at = NULL WHERE id = ?", [id]);
 }
+
+export function dismissArticle(id: number): void {
+  db.run("UPDATE articles SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL", [id]);
+}
+
+export function dismissArticles(ids: number[]): void {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => "?").join(",");
+  db.run(
+    `UPDATE articles SET dismissed_at = datetime('now') WHERE id IN (${placeholders}) AND dismissed_at IS NULL`,
+    ids
+  );
+}
+
+export function undismissArticle(id: number): void {
+  db.run("UPDATE articles SET dismissed_at = NULL WHERE id = ?", [id]);
+}
+
+export function getAutoArchiveDays(): number {
+  const row = db.query("SELECT value FROM settings WHERE key = 'auto_archive_days'").get() as { value: string } | null;
+  return row ? parseInt(row.value, 10) : 7;
+}
+
+export function runAutoArchive(days: number): number {
+  const result = db.run(
+    `UPDATE articles
+     SET archived_at = datetime('now')
+     WHERE curated_at IS NOT NULL
+       AND read_at IS NULL
+       AND dismissed_at IS NULL
+       AND archived_at IS NULL
+       AND datetime(COALESCE(published_at, fetched_at), '+' || ? || ' days') < datetime('now')`,
+    [days]
+  );
+  return result.changes;
+}

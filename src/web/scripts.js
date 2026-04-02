@@ -151,6 +151,43 @@ async function markSectionRead(btn) {
   updateUnreadCount();
 }
 
+async function dismissArticle(id) {
+  await fetch('/api/dismiss/' + id, { method: 'POST' });
+  const card = document.querySelector('[data-id="' + id + '"]');
+  if (card) {
+    card.style.display = 'none';
+    const section = card.closest('.tier-section');
+    if (section) {
+      const visible = section.querySelectorAll('.card:not([style*="display: none"])').length;
+      if (!visible) section.style.display = 'none';
+    }
+    updateUnreadCount();
+  }
+}
+
+async function skipSectionAll(btn) {
+  const section = btn.closest('.tier-section');
+  const cards = section.querySelectorAll('.card:not(.read):not([style*="display: none"])');
+  const ids = [...cards].map(c => Number(c.dataset.id));
+  if (ids.length === 0) return;
+  await fetch('/api/dismiss-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids })
+  });
+  cards.forEach(card => { card.style.display = 'none'; });
+  const visible = section.querySelectorAll('.card:not([style*="display: none"])').length;
+  if (!visible) section.style.display = 'none';
+  updateUnreadCount();
+}
+
+function setView(view) {
+  const p = new URLSearchParams(location.search);
+  view === 'active' ? p.delete('view') : p.set('view', view);
+  const qs = p.toString();
+  location.href = qs ? '?' + qs : '/';
+}
+
 function setSort(sort) {
   const p = new URLSearchParams(location.search);
   sort === 'newest' ? p.delete('sort') : p.set('sort', sort);

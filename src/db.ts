@@ -55,6 +55,8 @@ for (const [table, col] of [
   ["articles", "read_at TEXT"],
   ["articles", "tags TEXT"],
   ["feeds", "category TEXT"],
+  ["articles", "dismissed_at TEXT"],
+  ["articles", "archived_at TEXT"],
 ]) {
   try {
     db.run(`ALTER TABLE ${table} ADD COLUMN ${col}`);
@@ -62,3 +64,6 @@ for (const [table, col] of [
     // column already exists
   }
 }
+
+db.run("CREATE INDEX IF NOT EXISTS idx_articles_dismissed_at ON articles(dismissed_at)");
+db.run("CREATE INDEX IF NOT EXISTS idx_articles_archived_at ON articles(archived_at)");

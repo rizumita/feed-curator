@@ -1,11 +1,11 @@
 import Database from "better-sqlite3";
 import { mkdirSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { homedir } from "os";
 
 const DEFAULT_DIR = join(homedir(), ".feed-curator");
 const DB_PATH = process.env.DB_PATH ?? join(DEFAULT_DIR, "feed-curator.db");
-mkdirSync(process.env.DB_PATH ? join(DB_PATH, "..") : DEFAULT_DIR, { recursive: true });
+mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const db = new Database(DB_PATH);
 

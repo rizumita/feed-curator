@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import { cpSync } from "fs";
 
 export default defineConfig({
   entry: ["src/cli.ts"],
@@ -8,6 +9,7 @@ export default defineConfig({
   clean: true,
   splitting: false,
   sourcemap: false,
-  // Copy static web assets
-  onSuccess: 'cp -r src/web dist/web',
+  async onSuccess() {
+    cpSync("src/web", "dist/web", { recursive: true });
+  },
 });

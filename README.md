@@ -20,7 +20,7 @@ Collect articles from RSS feeds, let Claude Code summarize and score them, and b
 
 ## Requirements
 
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) (v20+)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## Quick Start
@@ -135,7 +135,7 @@ RSSフィードから記事を収集し、Claude Codeが要約・スコアリン
 
 ## 必要なもの
 
-- [Node.js](https://nodejs.org/) (v18+)
+- [Node.js](https://nodejs.org/) (v20+)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## クイックスタート

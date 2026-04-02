@@ -1,8 +1,8 @@
 # Feed Curator
 
-AI-powered RSS feed curation tool. Claude Code acts as the AI curator — no API keys needed.
+Personalized RSS briefings for developers, powered by Claude Code. No separate API keys.
 
-Collect articles from RSS feeds, let Claude Code summarize and score them, and browse the results in a stylish web UI.
+Your reading history trains the curation — the more you read and dismiss, the sharper your daily briefing becomes.
 
 [日本語版は下にあります / Japanese version below](#feed-curator-1)
 
@@ -10,13 +10,13 @@ Collect articles from RSS feeds, let Claude Code summarize and score them, and b
 
 ## Features
 
-- **Feed Collection** — Register RSS/Atom feeds by URL or discover them by topic
-- **AI Curation** — Claude Code reads articles, scores relevance (0.0-1.0), writes summaries in your language
-- **Personalized Scoring** — Learns from your reading history to boost what you care about
-- **Categories & Tags** — Organize feeds by category, tag articles by topic
+- **No API Keys** — Claude Code itself is the AI curator; no separate API key setup required
+- **Personalized Scoring** — Learns from your reading history (reads, dismisses) to boost what you care about
+- **AI Curation** — Scores relevance (0.0-1.0), writes summaries, assigns topic tags — all in your language
+- **Daily Briefing** — AI clusters today's articles by topic with summaries
+- **Feed Collection** — Register RSS/Atom feeds by URL or discover them by topic via AI
 - **Web UI** — Two-column layout with tier grouping, filters, read/unread tracking, dark/light theme
-- **Markdown Digest** — Generate daily digest files sorted by score
-- **Multi-language** — Summaries and digests written in your preferred language
+- **Multi-language** — Summaries and briefings written in your preferred language
 
 ## Requirements
 
@@ -119,19 +119,19 @@ No API keys needed — Claude Code itself is the AI.
 
 # Feed Curator
 
-AIがRSSフィードをキュレーションするツール。Claude Code自身がAIキュレーターとして動作します。APIキーは不要です。
+Claude Codeで動く、APIキー不要の、開発者向けパーソナル技術朝刊。
 
-RSSフィードから記事を収集し、Claude Codeが要約・スコアリングを行い、スタイリッシュなWeb UIで閲覧できます。
+読んだ記事・スキップした記事から嗜好を学習し、毎日のブリーフィングを最適化します。
 
 ## 特徴
 
-- **フィード収集** — URLでRSS/Atomフィードを登録、またはトピックで自動検索
-- **AIキュレーション** — Claude Codeが記事を読み、関連度スコア(0.0-1.0)と要約を設定言語で生成
-- **パーソナライズ** — 既読履歴から学習し、興味のあるトピックのスコアを自動調整
-- **カテゴリー & タグ** — フィードをカテゴリーで整理、記事にトピックタグを付与
+- **APIキー不要** — Claude Code自身がAIキュレーター。別途APIキーの設定は不要
+- **パーソナライズ** — 既読・スキップ履歴から学習し、興味のあるトピックのスコアを自動調整
+- **AIキュレーション** — 関連度スコア(0.0-1.0)、要約、トピックタグを設定言語で生成
+- **日次ブリーフィング** — AIが今日の記事をトピック別にクラスタリングして要約
+- **フィード収集** — URLでRSS/Atomフィードを登録、またはトピックでAIが自動検索
 - **Web UI** — 2カラムレイアウト、ティア別グループ、フィルター、既読管理、ダーク/ライトテーマ
-- **Markdownダイジェスト** — スコア順の日次ダイジェストを自動生成
-- **多言語対応** — 要約とダイジェストを設定した言語で出力
+- **多言語対応** — 要約とブリーフィングを設定した言語で出力
 
 ## 必要なもの
 

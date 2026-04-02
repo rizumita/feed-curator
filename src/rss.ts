@@ -20,9 +20,9 @@ export function parseFeed(xml: string): { title: string | null; items: RssItem[]
         : [];
 
     return {
-      title: decodeEntities(channel.title ?? ""),
+      title: decodeEntities(textOf(channel.title)),
       items: rawItems.map((item: any) => ({
-        title: decodeEntities(item.title ?? ""),
+        title: decodeEntities(textOf(item.title)),
         url: item.link ?? "",
         content: stripHtml(item.description ?? item["content:encoded"] ?? ""),
         publishedAt: item.pubDate ?? null,
@@ -40,7 +40,7 @@ export function parseFeed(xml: string): { title: string | null; items: RssItem[]
         : [];
 
     return {
-      title: decodeEntities(feed.title ?? ""),
+      title: decodeEntities(textOf(feed.title)),
       items: rawEntries.map((entry: any) => {
         const link =
           typeof entry.link === "string"
@@ -53,13 +53,9 @@ export function parseFeed(xml: string): { title: string | null; items: RssItem[]
               "";
 
         return {
-          title: decodeEntities(entry.title ?? ""),
+          title: decodeEntities(textOf(entry.title)),
           url: link,
-          content: stripHtml(
-            typeof entry.content === "string"
-              ? entry.content
-              : entry.content?.["#text"] ?? entry.summary ?? ""
-          ),
+          content: stripHtml(textOf(entry.content) || textOf(entry.summary)),
           publishedAt: entry.published ?? entry.updated ?? null,
         };
       }),
@@ -67,6 +63,15 @@ export function parseFeed(xml: string): { title: string | null; items: RssItem[]
   }
 
   return { title: null, items: [] };
+}
+
+function textOf(val: unknown): string {
+  if (typeof val === "string") return val;
+  if (typeof val === "number") return String(val);
+  if (val && typeof val === "object") {
+    return (val as any)["#text"] ?? (val as any)["_"] ?? "";
+  }
+  return "";
 }
 
 function stripHtml(html: string): string {

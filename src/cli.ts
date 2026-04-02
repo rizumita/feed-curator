@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { db } from "./db";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle, updateFeedCategory } from "./feed";
-import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticle, dismissArticles, getAutoArchiveDays, runAutoArchive } from "./article";
+import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticle, dismissArticles, getAutoArchiveDays, runAutoArchive, saveBriefing, getBriefing } from "./article";
 import { parseFeed } from "./rss";
 import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
@@ -285,6 +285,35 @@ program
       } else {
         console.log(`(not set)`);
       }
+    }
+  });
+
+// feed briefing
+program
+  .command("briefing")
+  .description("Show or save today's briefing")
+  .option("--save <json>", "Save briefing data (JSON)")
+  .option("--date <date>", "Show briefing for specific date (YYYY-MM-DD)")
+  .action((opts: { save?: string; date?: string }) => {
+    if (opts.save) {
+      const data = JSON.parse(opts.save);
+      const today = new Date().toISOString().slice(0, 10);
+      saveBriefing(today, data.clusters);
+      console.log(`Briefing saved for ${today} with ${data.clusters.length} topic(s).`);
+      return;
+    }
+    const date = opts.date ?? new Date().toISOString().slice(0, 10);
+    const briefing = getBriefing(date);
+    if (!briefing) {
+      console.log(`No briefing found for ${date}.`);
+      return;
+    }
+    const clusters = JSON.parse(briefing.clusters) as Array<{ topic: string; summary: string; article_ids: number[] }>;
+    console.log(`=== Briefing for ${date} ===\n`);
+    for (const cluster of clusters) {
+      console.log(`📌 ${cluster.topic} (${cluster.article_ids.length} articles)`);
+      console.log(`   ${cluster.summary}`);
+      console.log(`   Article IDs: ${cluster.article_ids.join(", ")}\n`);
     }
   });
 

@@ -24,6 +24,19 @@ export interface Article {
   archived_at: string | null;
 }
 
+export interface BriefingCluster {
+  topic: string;
+  summary: string;
+  article_ids: number[];
+}
+
+export interface Briefing {
+  id: number;
+  date: string;
+  clusters: string;
+  created_at: string;
+}
+
 export interface RssItem {
   title: string;
   url: string;

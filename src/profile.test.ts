@@ -15,6 +15,9 @@ function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
       { band: "0.50-0.69 (Worth a Look)", total: 5, read: 2, readRate: 0.4 },
       { band: "0.00-0.49 (Low Priority)", total: 5, read: 1, readRate: 0.2 },
     ],
+    totalDismissed: 0,
+    dismissRate: 0,
+    dismissedTags: [],
     ...overrides,
   };
 }

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import type { Article } from "./types";
+import type { Article, Briefing, BriefingCluster } from "./types";
 
 export function addArticle(
   url: string,
@@ -93,4 +93,22 @@ export function runAutoArchive(days: number): number {
     [days]
   );
   return result.changes;
+}
+
+export function saveBriefing(date: string, clusters: BriefingCluster[]): void {
+  db.run(
+    "INSERT OR REPLACE INTO briefings (date, clusters) VALUES (?, ?)",
+    [date, JSON.stringify(clusters)]
+  );
+}
+
+export function getBriefing(date: string): Briefing | null {
+  return (
+    (db.query("SELECT * FROM briefings WHERE date = ?").get(date) as Briefing) ?? null
+  );
+}
+
+export function getTodayBriefing(): Briefing | null {
+  const today = new Date().toISOString().slice(0, 10);
+  return getBriefing(today);
 }

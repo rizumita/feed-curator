@@ -181,9 +181,21 @@ async function skipSectionAll(btn) {
   updateUnreadCount();
 }
 
+async function skipCluster(btn, ids) {
+  if (ids.length === 0) return;
+  await fetch('/api/dismiss-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: ids })
+  });
+  const cluster = btn.closest('.briefing-cluster');
+  if (cluster) cluster.style.display = 'none';
+  updateUnreadCount();
+}
+
 function setView(view) {
   const p = new URLSearchParams(location.search);
-  view === 'active' ? p.delete('view') : p.set('view', view);
+  view === 'briefing' ? p.delete('view') : p.set('view', view);
   const qs = p.toString();
   location.href = qs ? '?' + qs : '/';
 }

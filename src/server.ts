@@ -1,7 +1,7 @@
 import { db } from "./db";
 import type { Article, Feed } from "./types";
 import { renderPage } from "./web/html";
-import { getAutoArchiveDays, runAutoArchive } from "./article";
+import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing } from "./article";
 
 type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
 
@@ -103,6 +103,14 @@ export function startServer(port: number = 3000): void {
         return Response.json({ ok: true, count: ids.length });
       }
 
+      // GET /api/briefing
+      if (url.pathname === "/api/briefing") {
+        const date = url.searchParams.get("date");
+        const briefing = date ? getBriefing(date) : getTodayBriefing();
+        if (!briefing) return Response.json(null);
+        return Response.json(briefing);
+      }
+
       // POST /api/dismiss/:id
       const dismissMatch = url.pathname.match(/^\/api\/dismiss\/(\d+)$/);
       if (dismissMatch && req.method === "POST") {
@@ -131,10 +139,13 @@ export function startServer(port: number = 3000): void {
         const archiveDays = getAutoArchiveDays();
         runAutoArchive(archiveDays);
         const sort = url.searchParams.get("sort") === "score" ? "score" : "newest";
-        const view = url.searchParams.get("view") === "archive" ? "archive" : "active";
-        const articles = getCuratedArticles(sort, view);
+        const view = url.searchParams.get("view") === "archive" ? "archive" :
+                     url.searchParams.get("view") === "all" ? "all" : "briefing";
+        const articles = getCuratedArticles(sort, view === "archive" ? "archive" : "active");
         const stats = getStats();
-        return new Response(renderPage(articles, stats, sort, view), {
+        const briefing = view === "briefing" ? getTodayBriefing() : null;
+        const effectiveView = (view === "briefing" && !briefing) ? "all" : view;
+        return new Response(renderPage(articles, stats, sort, effectiveView, briefing), {
           headers: {
             "Content-Type": "text/html; charset=utf-8",
             "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",

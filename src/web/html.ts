@@ -1,4 +1,4 @@
-import type { Article } from "../types";
+import type { Article, Briefing, BriefingCluster } from "../types";
 
 type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
 
@@ -108,11 +108,37 @@ interface Stats {
   archived: number;
 }
 
+function renderBriefingView(briefing: Briefing, articles: ArticleWithFeed[]): string {
+  const clusters: BriefingCluster[] = JSON.parse(briefing.clusters);
+  const articleMap = new Map(articles.map(a => [a.id, a]));
+
+  return clusters.map(cluster => {
+    const clusterArticles = cluster.article_ids
+      .map(id => articleMap.get(id))
+      .filter((a): a is ArticleWithFeed => a !== undefined);
+
+    if (clusterArticles.length === 0) return "";
+
+    const clusterIds = clusterArticles.map(a => a.id);
+
+    return `
+      <section class="briefing-cluster">
+        <div class="cluster-header">
+          <h2 class="cluster-topic">${escapeHtml(cluster.topic)} <span class="cluster-count">${clusterArticles.length}</span></h2>
+          <button class="skip-section-btn" onclick="skipCluster(this, [${clusterIds.join(",")}])" title="Skip this topic">Skip topic</button>
+        </div>
+        <p class="cluster-summary">${escapeHtml(cluster.summary)}</p>
+        ${clusterArticles.map(a => renderCard(a, "active")).join("\n")}
+      </section>`;
+  }).join("\n");
+}
+
 export function renderPage(
   articles: ArticleWithFeed[],
   stats: Stats,
   sort: "newest" | "score" = "newest",
-  view: "active" | "archive" = "active",
+  view: "briefing" | "all" | "archive" = "briefing",
+  briefing?: Briefing | null,
 ): string {
   const now = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -141,10 +167,10 @@ export function renderPage(
           <span class="tier-bar" style="background:${s.tier.color}"></span>
           <h2>${s.tier.label}</h2>
           <span class="tier-count">${s.articles.length}</span>
-          <button class="mark-section-read" onclick="markSectionRead(this)" title="Mark all visible as read">Mark all read</button>${view === "active" ? `
+          <button class="mark-section-read" onclick="markSectionRead(this)" title="Mark all visible as read">Mark all read</button>${view !== "archive" ? `
           <button class="skip-section-btn" onclick="skipSectionAll(this)" title="Skip all visible">Skip all</button>` : ""}
         </div>
-        ${s.articles.map(a => renderCard(a, view)).join("\n")}
+        ${s.articles.map(a => renderCard(a, view === "archive" ? "archive" : "active")).join("\n")}
       </section>`
     )
     .join("\n");
@@ -194,7 +220,8 @@ export function renderPage(
       <div class="sidebar-section">
         <div class="sidebar-heading">View</div>
         <div class="filter-list" id="view-filters">
-          <button class="filter-btn${view === "active" ? " active" : ""}" onclick="setView('active')">Active</button>
+          <button class="filter-btn${view === "briefing" ? " active" : ""}" onclick="setView('briefing')">Briefing</button>
+          <button class="filter-btn${view === "all" ? " active" : ""}" onclick="setView('all')">All</button>
           <button class="filter-btn${view === "archive" ? " active" : ""}" onclick="setView('archive')">Archive</button>
         </div>
       </div>
@@ -244,12 +271,21 @@ export function renderPage(
 
     <main class="main">
       ${
-        articles.length > 0
-          ? sectionHtml
-          : `<div class="empty">
-              <h2>No curated articles yet</h2>
-              <p>Run /curate to score and summarize your articles.</p>
-            </div>`
+        view === "briefing" && briefing
+          ? `<div class="briefing-header">
+               <h1>Today's Briefing</h1>
+               <span class="briefing-date">${now}</span>
+             </div>
+             ${renderBriefingView(briefing, articles)}
+             <div class="briefing-footer">
+               <a href="?view=all" class="see-all-link">See all ${stats.unread} unread articles &rarr;</a>
+             </div>`
+          : articles.length > 0
+            ? sectionHtml
+            : `<div class="empty">
+                <h2>No curated articles yet</h2>
+                <p>Run /curate to score and summarize your articles.</p>
+              </div>`
       }
       <footer>Feed Curator &mdash; AI-powered curation by Claude Code</footer>
     </main>

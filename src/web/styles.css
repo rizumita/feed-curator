@@ -495,6 +495,92 @@ footer {
   padding: 1.5rem 0;
 }
 
+/* --- Briefing View --- */
+.briefing-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.briefing-header h1 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+
+.briefing-date {
+  color: var(--text-dim);
+  font-size: 0.875rem;
+}
+
+.briefing-cluster {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.cluster-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.cluster-topic {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.cluster-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  background: var(--bg-alt, var(--surface-hover));
+  padding: 0.125rem 0.5rem;
+  border-radius: 10px;
+  margin-left: 0.5rem;
+}
+
+.cluster-summary {
+  color: var(--text-dim);
+  font-size: 0.875rem;
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.briefing-cluster .card {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  margin-bottom: 0;
+}
+
+.briefing-cluster .card:first-of-type {
+  border-top: 1px solid var(--border);
+}
+
+.briefing-footer {
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.see-all-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.see-all-link:hover {
+  text-decoration: underline;
+}
+
 /* --- Mobile --- */
 @media (max-width: 768px) {
   .layout { flex-direction: column; }

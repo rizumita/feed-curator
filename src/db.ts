@@ -50,6 +50,15 @@ db.run("CREATE INDEX IF NOT EXISTS idx_articles_curated_at ON articles(curated_a
 db.run("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at)");
 db.run("CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score)");
 
+db.run(`
+  CREATE TABLE IF NOT EXISTS briefings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL UNIQUE,
+    clusters TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )
+`);
+
 // Migrations
 for (const [table, col] of [
   ["articles", "read_at TEXT"],

@@ -20,6 +20,10 @@ import {
   getTodayBriefing,
   getConfig,
   setConfig,
+  getPreferenceMemo,
+  savePreferenceMemo,
+  isPreferenceMemoStale,
+  getRecentActions,
 } from "./article";
 import type { BriefingCluster } from "./types";
 
@@ -411,5 +415,148 @@ describe("getConfig / setConfig", () => {
     setConfig("theme", "dark");
     expect(getConfig("language")).toBe("en");
     expect(getConfig("theme")).toBe("dark");
+  });
+});
+
+// ─── Preference Memo ───
+
+describe("getPreferenceMemo / savePreferenceMemo", () => {
+  beforeEach(() => {
+    db.exec("DELETE FROM settings");
+  });
+
+  test("getPreferenceMemo returns null when no memo exists", () => {
+    expect(getPreferenceMemo()).toBeNull();
+  });
+
+  test("savePreferenceMemo stores memo and timestamp", () => {
+    savePreferenceMemo("- Prefers: hands-on tutorials");
+    expect(getPreferenceMemo()).toBe("- Prefers: hands-on tutorials");
+    expect(getConfig("preference_memo_updated_at")).not.toBeNull();
+  });
+
+  test("savePreferenceMemo overwrites previous memo", () => {
+    savePreferenceMemo("first memo");
+    savePreferenceMemo("second memo");
+    expect(getPreferenceMemo()).toBe("second memo");
+  });
+});
+
+describe("isPreferenceMemoStale", () => {
+  beforeEach(() => {
+    db.exec("DELETE FROM settings");
+    db.exec("DELETE FROM articles");
+  });
+
+  test("returns true when no memo exists", () => {
+    expect(isPreferenceMemoStale()).toBe(true);
+  });
+
+  test("returns false when memo is less than 24h old", () => {
+    savePreferenceMemo("fresh memo");
+    expect(isPreferenceMemoStale()).toBe(false);
+  });
+
+  test("returns false when memo is old but fewer than 20 new actions", () => {
+    // Set memo timestamp to 2 days ago
+    setConfig("preference_memo", "old memo");
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    setConfig("preference_memo_updated_at", twoDaysAgo);
+
+    // Add only 5 read articles (< 20 threshold)
+    const feedId = listFeeds()[0]?.id ?? null;
+    for (let i = 0; i < 5; i++) {
+      addArticle(`https://example.com/stale-test-${i}`, `Article ${i}`, "content", feedId ?? undefined);
+    }
+    const articles = listArticles();
+    for (const a of articles) {
+      updateArticleCuration(a.id, 0.8, "summary");
+      markAsRead(a.id);
+    }
+
+    expect(isPreferenceMemoStale()).toBe(false);
+  });
+
+  test("returns true when memo is old and 20+ new actions exist", () => {
+    setConfig("preference_memo", "old memo");
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    setConfig("preference_memo_updated_at", twoDaysAgo);
+
+    const feedId = listFeeds()[0]?.id ?? null;
+    for (let i = 0; i < 20; i++) {
+      addArticle(`https://example.com/stale-bulk-${i}`, `Bulk ${i}`, "content", feedId ?? undefined);
+    }
+    const articles = listArticles();
+    for (const a of articles) {
+      updateArticleCuration(a.id, 0.7, "summary");
+      markAsRead(a.id);
+    }
+
+    expect(isPreferenceMemoStale()).toBe(true);
+  });
+});
+
+describe("getRecentActions", () => {
+  beforeEach(() => {
+    db.exec("DELETE FROM articles");
+  });
+
+  test("returns empty array when no actions", () => {
+    expect(getRecentActions(90, 100)).toEqual([]);
+  });
+
+  test("returns read articles with action 'read'", () => {
+    const feedId = listFeeds()[0]?.id ?? null;
+    addArticle("https://example.com/recent-read", "Read Article", "content", feedId ?? undefined);
+    const articles = listArticles();
+    updateArticleCuration(articles[0].id, 0.9, "great article", "ai,tools");
+    markAsRead(articles[0].id);
+
+    const actions = getRecentActions(90, 100);
+    expect(actions.length).toBe(1);
+    expect(actions[0].action).toBe("read");
+    expect(actions[0].title).toBe("Read Article");
+    expect(actions[0].score).toBe(0.9);
+    expect(actions[0].tags).toBe("ai,tools");
+  });
+
+  test("returns dismissed articles with action 'dismissed'", () => {
+    const feedId = listFeeds()[0]?.id ?? null;
+    addArticle("https://example.com/recent-dismiss", "Dismissed Article", "content", feedId ?? undefined);
+    const articles = listArticles();
+    updateArticleCuration(articles[0].id, 0.3, "not interesting");
+    dismissArticle(articles[0].id);
+
+    const actions = getRecentActions(90, 100);
+    expect(actions.length).toBe(1);
+    expect(actions[0].action).toBe("dismissed");
+  });
+
+  test("respects limit parameter", () => {
+    const feedId = listFeeds()[0]?.id ?? null;
+    for (let i = 0; i < 5; i++) {
+      addArticle(`https://example.com/limit-${i}`, `Limit ${i}`, "content", feedId ?? undefined);
+    }
+    const articles = listArticles();
+    for (const a of articles) {
+      updateArticleCuration(a.id, 0.5, "summary");
+      markAsRead(a.id);
+    }
+
+    const actions = getRecentActions(90, 3);
+    expect(actions.length).toBe(3);
+  });
+
+  test("excludes articles outside the day range", () => {
+    const feedId = listFeeds()[0]?.id ?? null;
+    addArticle("https://example.com/old-action", "Old Article", "content", feedId ?? undefined);
+    const articles = listArticles();
+    updateArticleCuration(articles[0].id, 0.5, "summary");
+    // Set read_at to 100 days ago (outside 90-day window)
+    const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();
+    db.prepare("UPDATE articles SET read_at = ? WHERE id = ?").run(oldDate, articles[0].id);
+
+    const actions = getRecentActions(90, 100);
+    expect(actions.length).toBe(0);
   });
 });

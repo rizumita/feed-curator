@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { getPreferenceMemo } from "./article";
 
 interface TagStat {
   tag: string;
@@ -217,6 +218,11 @@ export function profileForPrompt(p: UserProfile): string {
     }
   }
 
-  prompt += "\nAdjust scores accordingly: boost articles matching preferred tags/sources, lower scores for ignored and dismissed tags. Use score band patterns to calibrate scoring thresholds.";
+  const memo = getPreferenceMemo();
+  if (memo) {
+    prompt += `\nSemantic preferences (AI-generated from reading history):\n${memo}\n`;
+  }
+
+  prompt += "\nAdjust scores accordingly: boost articles matching preferred tags/sources, lower scores for ignored and dismissed tags. Use score band patterns and semantic preferences to calibrate scoring.";
   return prompt;
 }

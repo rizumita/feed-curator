@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import { addFeed, listFeeds, updateFeedCategory, fetchAllFeeds } from "./feed";
-import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticles, getAutoArchiveDays, runAutoArchive, saveBriefing, getBriefing, getConfig, setConfig } from "./article";
+import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticles, getAutoArchiveDays, runAutoArchive, saveBriefing, getBriefing, getConfig, setConfig, isPreferenceMemoStale } from "./article";
 import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
-import { aiCurate, aiBriefing } from "./ai";
+import { aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
 
 const program = new Command();
 program.name("feed-curator").description("AI-powered RSS feed curation tool");
@@ -294,6 +294,12 @@ program
     if (opts.fetch) {
       console.log("\n=== Fetching feeds ===");
       await fetchAllFeeds({ verbose: true });
+    }
+
+    // 1.5. Preference memo
+    if (isPreferenceMemoStale()) {
+      console.log("\n=== Updating Preference Memo ===");
+      await aiGenerateMemo();
     }
 
     // 2. AI Curate

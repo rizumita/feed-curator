@@ -3,8 +3,8 @@ import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { renderPage } from "./web/html";
-import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing, getCuratedArticles, getActiveArticles, getStats, toggleRead, markAsRead, dismissArticle, dismissArticles, getConfig, setConfig } from "./article";
-import { aiDiscoverFeeds, aiCurate, aiBriefing } from "./ai";
+import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing, getCuratedArticles, getActiveArticles, getStats, toggleRead, markAsRead, dismissArticle, dismissArticles, getConfig, setConfig, isPreferenceMemoStale } from "./article";
+import { aiDiscoverFeeds, aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
 import { addFeed, fetchAllFeeds, listFeeds, removeFeed } from "./feed";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -144,6 +144,11 @@ export function startServer(port: number = 3000): import("http").Server {
           send("Fetching feeds...");
           const newArticles = await fetchAllFeeds({ onProgress: send });
           send(`Fetched ${newArticles} new article(s).`);
+
+          // 1.5. Regenerate preference memo if stale
+          if (isPreferenceMemoStale()) {
+            await aiGenerateMemo(send);
+          }
 
           // 2. Curate uncurated articles
           send("AI curating articles...");

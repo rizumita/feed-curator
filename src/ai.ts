@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { listArticles, updateArticleCuration, saveBriefing, getConfig } from "./article";
+import { listArticles, updateArticleCuration, saveBriefing, getConfig, getRecentActions, savePreferenceMemo } from "./article";
 import { generateProfile, profileForPrompt } from "./profile";
 import { normalizeTags } from "./tag";
 
@@ -257,4 +257,54 @@ Guidelines:
   } catch {
     return [];
   }
+}
+
+export async function aiGenerateMemo(onProgress?: (msg: string) => void): Promise<string | null> {
+  const actions = getRecentActions(90, 100);
+  if (actions.length < 10) {
+    const msg = "Not enough reading history for preference memo (need 10+).";
+    console.log(msg);
+    onProgress?.(msg);
+    return null;
+  }
+
+  const language = getConfig("language") ?? "en";
+  const actionsJson = actions.map(a => ({
+    title: a.title,
+    summary: a.summary,
+    tags: a.tags,
+    score: a.score,
+    action: a.action,
+  }));
+
+  const prompt = `You are a reading preference analyst. Analyze the user's reading behavior and write a concise semantic preference memo.
+
+Recent articles the user interacted with (action: "read" = user chose to read, "dismissed" = user skipped):
+${JSON.stringify(actionsJson, null, 2)}
+
+Write a preference memo in ${language} that captures:
+- **Prefers**: What topics, styles, and depth levels the user gravitates toward
+- **Avoids**: What types of content the user consistently skips
+- **Recent interest shift**: Any emerging trends in their reading
+
+Rules:
+- Focus on SEMANTIC patterns (e.g. "prefers hands-on tutorials with code" not "reads articles tagged 'coding'")
+- Do NOT repeat tag statistics — capture the WHY behind the reading choices
+- Keep each bullet to one line
+- Write 3-7 bullet points total
+- Output ONLY the bullet list, no headers or explanation`;
+
+  onProgress?.("Generating preference memo...");
+  const response = await callClaude(prompt);
+  if (!response) {
+    console.error("Failed to generate preference memo.");
+    return null;
+  }
+
+  const memo = response.trim();
+  savePreferenceMemo(memo);
+  const msg = "Preference memo updated.";
+  console.log(msg);
+  onProgress?.(msg);
+  return memo;
 }

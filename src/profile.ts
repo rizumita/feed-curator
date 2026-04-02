@@ -38,7 +38,7 @@ export interface UserProfile {
 
 export function generateProfile(): UserProfile {
   const curated = db
-    .query(
+    .prepare(
       `SELECT a.*, f.title as feed_title, f.category
        FROM articles a
        LEFT JOIN feeds f ON a.feed_id = f.id

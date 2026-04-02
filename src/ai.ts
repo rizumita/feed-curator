@@ -5,7 +5,7 @@ import { generateProfile, profileForPrompt } from "./profile";
 import type { Article } from "./types";
 
 function getConfig(key: string): string | null {
-  const row = db.query("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | null;
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | null;
   return row?.value ?? null;
 }
 

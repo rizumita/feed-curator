@@ -11,17 +11,30 @@
   "keywords": ["rss", "feed", "curation", "ai", "claude-code"],
   "type": "module",
   "bin": {
-    "feed-curator": "src/cli.ts"
+    "feed-curator": "dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "feed": "bun src/cli.ts",
-    "test": "DB_PATH=./data/test.db bun test"
+    "build": "tsup",
+    "dev": "tsx src/cli.ts",
+    "test": "DB_PATH=./data/test.db vitest run",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "better-sqlite3": "^12.8.0",
     "commander": "^13.0.0",
     "fast-xml-parser": "^5.0.0"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/better-sqlite3": "^7.6.13",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

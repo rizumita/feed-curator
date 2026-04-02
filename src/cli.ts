@@ -281,10 +281,10 @@ program
   .argument("[value]", "Config value to set")
   .action((key: string, value?: string) => {
     if (value !== undefined) {
-      db.run("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", [key, value]);
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, value);
       console.log(`Set ${key} = ${value}`);
     } else {
-      const row = db.query("SELECT value FROM settings WHERE key = ?").get(key) as
+      const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
         | { value: string }
         | null;
       if (row) {

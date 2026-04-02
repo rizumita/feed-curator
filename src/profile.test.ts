@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { formatProfile, profileForPrompt, type UserProfile } from "./profile";
 
 function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {

@@ -1,16 +1,16 @@
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import { mkdirSync } from "fs";
 
 const DB_PATH = process.env.DB_PATH ?? "./data/feed-curator.db";
-
 mkdirSync("./data", { recursive: true });
 
 export const db = new Database(DB_PATH);
 
-db.run("PRAGMA journal_mode = WAL");
-db.run("PRAGMA foreign_keys = ON");
+db.pragma("journal_mode = WAL");
+db.pragma("foreign_keys = ON");
 
-db.run(`
+// Schema
+db.exec(`
   CREATE TABLE IF NOT EXISTS feeds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     url TEXT NOT NULL UNIQUE,
@@ -20,14 +20,14 @@ db.run(`
   )
 `);
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   )
 `);
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS articles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     feed_id INTEGER,
@@ -44,13 +44,12 @@ db.run(`
   )
 `);
 
-// Indexes
-db.run("CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)");
-db.run("CREATE INDEX IF NOT EXISTS idx_articles_curated_at ON articles(curated_at)");
-db.run("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at)");
-db.run("CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_feed_id ON articles(feed_id)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_curated_at ON articles(curated_at)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_published_at ON articles(published_at)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score)");
 
-db.run(`
+db.exec(`
   CREATE TABLE IF NOT EXISTS briefings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     date TEXT NOT NULL UNIQUE,
@@ -68,11 +67,11 @@ for (const [table, col] of [
   ["articles", "archived_at TEXT"],
 ]) {
   try {
-    db.run(`ALTER TABLE ${table} ADD COLUMN ${col}`);
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${col}`);
   } catch {
     // column already exists
   }
 }
 
-db.run("CREATE INDEX IF NOT EXISTS idx_articles_dismissed_at ON articles(dismissed_at)");
-db.run("CREATE INDEX IF NOT EXISTS idx_articles_archived_at ON articles(archived_at)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_dismissed_at ON articles(dismissed_at)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_archived_at ON articles(archived_at)");

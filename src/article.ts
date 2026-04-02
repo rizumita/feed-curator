@@ -8,17 +8,16 @@ export function addArticle(
   feedId?: number,
   publishedAt?: string
 ): boolean {
-  const result = db.run(
-    "INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at) VALUES (?, ?, ?, ?, ?)",
-    [feedId ?? null, url, title ?? null, content ?? null, publishedAt ?? null]
-  );
+  const result = db.prepare(
+    "INSERT OR IGNORE INTO articles (feed_id, url, title, content, published_at) VALUES (?, ?, ?, ?, ?)"
+  ).run(feedId ?? null, url, title ?? null, content ?? null, publishedAt ?? null);
   return result.changes > 0;
 }
 
 export function listArticles(uncuratedOnly: boolean = false): Article[] {
   const where = uncuratedOnly ? "WHERE curated_at IS NULL" : "";
   return db
-    .query(`SELECT * FROM articles ${where} ORDER BY fetched_at DESC`)
+    .prepare(`SELECT * FROM articles ${where} ORDER BY fetched_at DESC`)
     .all() as Article[];
 }
 
@@ -29,82 +28,77 @@ export function updateArticleCuration(
   tags?: string
 ): void {
   if (tags !== undefined) {
-    db.run(
-      "UPDATE articles SET score = ?, summary = ?, tags = ?, curated_at = datetime('now') WHERE id = ?",
-      [score, summary, tags, id]
-    );
+    db.prepare(
+      "UPDATE articles SET score = ?, summary = ?, tags = ?, curated_at = datetime('now') WHERE id = ?"
+    ).run(score, summary, tags, id);
   } else {
-    db.run(
-      "UPDATE articles SET score = ?, summary = ?, curated_at = datetime('now') WHERE id = ?",
-      [score, summary, id]
-    );
+    db.prepare(
+      "UPDATE articles SET score = ?, summary = ?, curated_at = datetime('now') WHERE id = ?"
+    ).run(score, summary, id);
   }
 }
 
 export function updateArticleTags(id: number, tags: string): void {
-  db.run("UPDATE articles SET tags = ? WHERE id = ?", [tags, id]);
+  db.prepare("UPDATE articles SET tags = ? WHERE id = ?").run(tags, id);
 }
 
 export function getArticleById(id: number): Article | null {
   return (
-    (db.query("SELECT * FROM articles WHERE id = ?").get(id) as Article) ?? null
+    (db.prepare("SELECT * FROM articles WHERE id = ?").get(id) as Article) ?? null
   );
 }
 
 export function markAsRead(id: number): void {
-  db.run("UPDATE articles SET read_at = datetime('now') WHERE id = ?", [id]);
+  db.prepare("UPDATE articles SET read_at = datetime('now') WHERE id = ?").run(id);
 }
 
 export function markAsUnread(id: number): void {
-  db.run("UPDATE articles SET read_at = NULL WHERE id = ?", [id]);
+  db.prepare("UPDATE articles SET read_at = NULL WHERE id = ?").run(id);
 }
 
 export function dismissArticle(id: number): void {
-  db.run("UPDATE articles SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL", [id]);
+  db.prepare("UPDATE articles SET dismissed_at = datetime('now') WHERE id = ? AND dismissed_at IS NULL").run(id);
 }
 
 export function dismissArticles(ids: number[]): void {
   if (ids.length === 0) return;
   const placeholders = ids.map(() => "?").join(",");
-  db.run(
-    `UPDATE articles SET dismissed_at = datetime('now') WHERE id IN (${placeholders}) AND dismissed_at IS NULL`,
-    ids
-  );
+  db.prepare(
+    `UPDATE articles SET dismissed_at = datetime('now') WHERE id IN (${placeholders}) AND dismissed_at IS NULL`
+  ).run(...ids);
 }
 
 export function undismissArticle(id: number): void {
-  db.run("UPDATE articles SET dismissed_at = NULL WHERE id = ?", [id]);
+  db.prepare("UPDATE articles SET dismissed_at = NULL WHERE id = ?").run(id);
 }
 
 export function getAutoArchiveDays(): number {
-  const row = db.query("SELECT value FROM settings WHERE key = 'auto_archive_days'").get() as { value: string } | null;
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'auto_archive_days'").get() as { value: string } | null;
   return row ? parseInt(row.value, 10) : 7;
 }
 
 export function runAutoArchive(days: number): number {
-  const result = db.run(
+  const result = db.prepare(
     `UPDATE articles
      SET archived_at = datetime('now')
      WHERE curated_at IS NOT NULL
        AND read_at IS NULL
        AND dismissed_at IS NULL
        AND archived_at IS NULL
-       AND datetime(COALESCE(published_at, fetched_at), '+' || ? || ' days') < datetime('now')`,
-    [days]
-  );
+       AND datetime(COALESCE(published_at, fetched_at), '+' || ? || ' days') < datetime('now')`
+  ).run(days);
   return result.changes;
 }
 
 export function saveBriefing(date: string, clusters: BriefingCluster[]): void {
-  db.run(
-    "INSERT OR REPLACE INTO briefings (date, clusters) VALUES (?, ?)",
-    [date, JSON.stringify(clusters)]
-  );
+  db.prepare(
+    "INSERT OR REPLACE INTO briefings (date, clusters) VALUES (?, ?)"
+  ).run(date, JSON.stringify(clusters));
 }
 
 export function getBriefing(date: string): Briefing | null {
   return (
-    (db.query("SELECT * FROM briefings WHERE date = ?").get(date) as Briefing) ?? null
+    (db.prepare("SELECT * FROM briefings WHERE date = ?").get(date) as Briefing) ?? null
   );
 }
 

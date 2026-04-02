@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { getTier, escapeHtml, formatDate, getAllCategories, getAllTags, renderPage } from "./html";
 import type { Article } from "../types";
 

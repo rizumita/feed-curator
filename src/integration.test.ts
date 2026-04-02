@@ -1,20 +1,21 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, afterAll } from "vitest";
+import { createServer, type Server } from "http";
 import { db } from "./db";
 import { addFeed, listFeeds, getAllFeeds, updateFeedFetchedAt, updateFeedTitle, updateFeedCategory } from "./feed";
 import { addArticle, listArticles, updateArticleCuration, updateArticleTags, getArticleById, markAsRead, markAsUnread } from "./article";
 
 // Clean up any leftover test data (test DB is set via DB_PATH env in package.json)
 beforeAll(() => {
-  db.run("DELETE FROM articles");
-  db.run("DELETE FROM feeds");
-  db.run("DELETE FROM settings");
+  db.exec("DELETE FROM articles");
+  db.exec("DELETE FROM feeds");
+  db.exec("DELETE FROM settings");
 });
 
 // ─── Database Schema ───
 
 describe("database schema", () => {
   test("feeds table exists with correct columns", () => {
-    const cols = db.query("PRAGMA table_info(feeds)").all() as any[];
+    const cols = db.prepare("PRAGMA table_info(feeds)").all() as any[];
     const names = cols.map((c) => c.name);
     expect(names).toContain("id");
     expect(names).toContain("url");
@@ -25,7 +26,7 @@ describe("database schema", () => {
   });
 
   test("articles table exists with correct columns", () => {
-    const cols = db.query("PRAGMA table_info(articles)").all() as any[];
+    const cols = db.prepare("PRAGMA table_info(articles)").all() as any[];
     const names = cols.map((c) => c.name);
     expect(names).toContain("id");
     expect(names).toContain("feed_id");
@@ -37,14 +38,14 @@ describe("database schema", () => {
   });
 
   test("settings table exists", () => {
-    const cols = db.query("PRAGMA table_info(settings)").all() as any[];
+    const cols = db.prepare("PRAGMA table_info(settings)").all() as any[];
     const names = cols.map((c) => c.name);
     expect(names).toContain("key");
     expect(names).toContain("value");
   });
 
   test("indexes exist on articles", () => {
-    const indexes = db.query("PRAGMA index_list(articles)").all() as any[];
+    const indexes = db.prepare("PRAGMA index_list(articles)").all() as any[];
     const names = indexes.map((i) => i.name);
     expect(names).toContain("idx_articles_feed_id");
     expect(names).toContain("idx_articles_curated_at");
@@ -53,12 +54,12 @@ describe("database schema", () => {
   });
 
   test("WAL mode is enabled", () => {
-    const result = db.query("PRAGMA journal_mode").get() as any;
+    const result = db.prepare("PRAGMA journal_mode").get() as any;
     expect(result.journal_mode).toBe("wal");
   });
 
   test("foreign keys are enabled", () => {
-    const result = db.query("PRAGMA foreign_keys").get() as any;
+    const result = db.prepare("PRAGMA foreign_keys").get() as any;
     expect(result.foreign_keys).toBe(1);
   });
 });
@@ -252,12 +253,12 @@ describe("unique constraints", () => {
 
 describe("server API", () => {
   let baseUrl: string;
-  let server: ReturnType<typeof Bun.serve>;
+  let server: Server;
 
   beforeAll(async () => {
     // Seed server test data
-    db.run("DELETE FROM articles");
-    db.run("DELETE FROM feeds");
+    db.exec("DELETE FROM articles");
+    db.exec("DELETE FROM feeds");
 
     addFeed("https://server-test.com/feed.xml", "Server Feed", "Tech");
     const feed = listFeeds()[0];
@@ -271,57 +272,74 @@ describe("server API", () => {
     updateArticleCuration(a1.id, 0.9, "Great", "ai");
     updateArticleCuration(a2.id, 0.6, "OK", "security");
 
-    const { startServer } = await import("./server");
-    // Use Bun.serve directly to get a random port
-    const s = Bun.serve({
-      port: 0,
-      async fetch(req) {
-        const url = new URL(req.url);
+    await new Promise<void>((resolve) => {
+      server = createServer(async (req, res) => {
+        const url = new URL(req.url!, `http://localhost`);
 
         if (url.pathname === "/api/articles") {
-          const rows = db.query(
+          const rows = db.prepare(
             `SELECT a.*, f.title as feed_title, f.category
              FROM articles a LEFT JOIN feeds f ON a.feed_id = f.id
              WHERE a.curated_at IS NOT NULL
              ORDER BY a.published_at DESC, a.fetched_at DESC`
           ).all();
-          return Response.json(rows);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(rows));
+          return;
         }
 
         if (url.pathname === "/api/feeds") {
-          return Response.json(db.query("SELECT * FROM feeds ORDER BY created_at DESC").all());
+          const rows = db.prepare("SELECT * FROM feeds ORDER BY created_at DESC").all();
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(rows));
+          return;
         }
 
         const readMatch = url.pathname.match(/^\/api\/read\/(\d+)$/);
         if (readMatch && req.method === "POST") {
           const id = Number(readMatch[1]);
-          const article = db.query("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
-          if (!article) return Response.json({ ok: false }, { status: 404 });
-          if (article.read_at) {
-            db.run("UPDATE articles SET read_at = NULL WHERE id = ?", [id]);
-          } else {
-            db.run("UPDATE articles SET read_at = datetime('now') WHERE id = ?", [id]);
+          const article = db.prepare("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
+          if (!article) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: false }));
+            return;
           }
-          return Response.json({ ok: true });
+          if (article.read_at) {
+            db.prepare("UPDATE articles SET read_at = NULL WHERE id = ?").run(id);
+          } else {
+            db.prepare("UPDATE articles SET read_at = datetime('now') WHERE id = ?").run(id);
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true }));
+          return;
         }
 
         if (url.pathname === "/api/read-batch" && req.method === "POST") {
-          const { ids } = await req.json() as { ids: number[] };
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) chunks.push(chunk as Buffer);
+          const { ids } = JSON.parse(Buffer.concat(chunks).toString()) as { ids: number[] };
           for (const id of ids) {
-            db.run("UPDATE articles SET read_at = datetime('now') WHERE id = ? AND read_at IS NULL", [id]);
+            db.prepare("UPDATE articles SET read_at = datetime('now') WHERE id = ? AND read_at IS NULL").run(id);
           }
-          return Response.json({ ok: true, count: ids.length });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, count: ids.length }));
+          return;
         }
 
-        return new Response("Not Found", { status: 404 });
-      },
+        res.writeHead(404);
+        res.end("Not Found");
+      });
+
+      server.listen(0, () => {
+        const addr = server.address() as { port: number };
+        baseUrl = `http://localhost:${addr.port}`;
+        resolve();
+      });
     });
-    server = s;
-    baseUrl = `http://localhost:${s.port}`;
   });
 
   afterAll(() => {
-    server?.stop();
+    server?.close();
   });
 
   test("GET /api/articles returns curated articles only", async () => {
@@ -348,17 +366,17 @@ describe("server API", () => {
   });
 
   test("POST /api/read/:id toggles read status", async () => {
-    const articles = db.query("SELECT id FROM articles WHERE curated_at IS NOT NULL ORDER BY id").all() as any[];
+    const articles = db.prepare("SELECT id FROM articles WHERE curated_at IS NOT NULL ORDER BY id").all() as any[];
     const id = articles[0].id;
 
     // Mark read
     await fetch(`${baseUrl}/api/read/${id}`, { method: "POST" });
-    let a = db.query("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
+    let a = db.prepare("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
     expect(a.read_at).not.toBeNull();
 
     // Toggle back to unread
     await fetch(`${baseUrl}/api/read/${id}`, { method: "POST" });
-    a = db.query("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
+    a = db.prepare("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
     expect(a.read_at).toBeNull();
   });
 
@@ -368,8 +386,8 @@ describe("server API", () => {
   });
 
   test("POST /api/read-batch marks multiple as read", async () => {
-    const articles = db.query("SELECT id FROM articles WHERE curated_at IS NOT NULL").all() as any[];
-    db.run("UPDATE articles SET read_at = NULL"); // reset
+    const articles = db.prepare("SELECT id FROM articles WHERE curated_at IS NOT NULL").all() as any[];
+    db.exec("UPDATE articles SET read_at = NULL"); // reset
 
     const ids = articles.map((a: any) => a.id);
     const res = await fetch(`${baseUrl}/api/read-batch`, {
@@ -382,7 +400,7 @@ describe("server API", () => {
     expect(data.count).toBe(ids.length);
 
     for (const id of ids) {
-      const a = db.query("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
+      const a = db.prepare("SELECT read_at FROM articles WHERE id = ?").get(id) as any;
       expect(a.read_at).not.toBeNull();
     }
   });

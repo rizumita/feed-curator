@@ -72,6 +72,7 @@ export function getAllTags(articles: ArticleWithFeed[]): string[] {
 }
 
 function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): string {
+  const uncurated = a.score === null;
   const score = a.score ?? 0;
   const tier = getTier(score);
   const title = escapeHtml(a.title ?? "(Untitled)");
@@ -84,7 +85,7 @@ function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): 
   const tagsHtml = tags.map((t: string) => `<span class="tag" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
 
   return `
-    <article class="card${isRead ? " read" : ""}" data-id="${a.id}" data-tier="${tier.id}" data-tags="${escapeHtml(tags.join(","))}" data-category="${escapeHtml(a.category ?? "")}">
+    <article class="card${isRead ? " read" : ""}${uncurated ? " uncurated" : ""}" data-id="${a.id}" data-tier="${uncurated ? "uncurated" : tier.id}" data-tags="${escapeHtml(tags.join(","))}" data-category="${escapeHtml(a.category ?? "")}">
       <div class="card-row">
         <button class="read-btn${isRead ? " is-read" : ""}" onclick="toggleRead(${a.id})" title="${isRead ? "Mark unread" : "Mark read"}">
           ${isRead ? "✓" : ""}
@@ -94,7 +95,7 @@ function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): 
           <h3 class="card-title">
             <a href="${sanitizeUrl(a.url)}" target="_blank" rel="noopener" onclick="markRead(${a.id})">${title}</a>
           </h3>
-          <p class="card-summary">${summary}</p>
+          <p class="card-summary">${uncurated ? "<em>Pending curation...</em>" : summary}</p>
           <div class="card-meta">
             <span class="feed-name">${feedName}</span>
             ${published ? `<span class="sep">&middot;</span><span class="date">${published}</span>` : ""}
@@ -102,9 +103,9 @@ function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): 
           </div>
         </div>
         <div class="card-score">
-          <div class="score-ring" style="--pct:${pct};--color:${tier.color}">
-            <span>${pct}</span>
-          </div>
+          ${uncurated
+            ? `<div class="score-ring" style="--pct:0;--color:#9ca3af"><span>—</span></div>`
+            : `<div class="score-ring" style="--pct:${pct};--color:${tier.color}"><span>${pct}</span></div>`}
         </div>
       </div>
     </article>`;

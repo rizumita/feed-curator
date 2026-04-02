@@ -280,6 +280,7 @@ body {
 
 .card.read { opacity: 0.45; }
 .card.read:hover { opacity: 0.75; }
+.card.uncurated { opacity: 0.55; border-style: dashed; }
 
 .card-row {
   display: flex;

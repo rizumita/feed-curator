@@ -1,8 +1,8 @@
 import type { Briefing, BriefingCluster } from "../types";
 import type { ArticleWithFeed } from "../article";
-import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const { version } = require("../../package.json");
+
+declare const __APP_VERSION__: string;
+const version = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
 
 interface Tier {
   id: string;

@@ -1,6 +1,6 @@
 {
   "name": "feed-curator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI-powered RSS feed curation tool using Claude Code as the AI curator",
   "author": "Ryoichi Izumita <r.izumita@caph.jp>",
   "license": "MIT",

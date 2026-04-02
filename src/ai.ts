@@ -302,6 +302,10 @@ Rules:
   }
 
   const memo = response.trim();
+  if (!memo) {
+    console.error("Empty preference memo received.");
+    return null;
+  }
   savePreferenceMemo(memo);
   const msg = "Preference memo updated.";
   console.log(msg);

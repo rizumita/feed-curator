@@ -196,6 +196,7 @@ export function isPreferenceMemoStale(): boolean {
   if (!updatedAt) return true; // never generated
 
   const elapsed = Date.now() - new Date(updatedAt).getTime();
+  if (Number.isNaN(elapsed)) return true; // invalid date → treat as stale
   const oneDayMs = 24 * 60 * 60 * 1000;
   if (elapsed < oneDayMs) return false;
 

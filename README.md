@@ -20,92 +20,91 @@ Collect articles from RSS feeds, let Claude Code summarize and score them, and b
 
 ## Requirements
 
-- [Bun](https://bun.sh/) runtime
+- [Node.js](https://nodejs.org/) (v18+)
+- [pnpm](https://pnpm.io/)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## Quick Start
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/user/feed-curator.git
+git clone https://github.com/rizumita/feed-curator.git
 cd feed-curator
-bun install
+pnpm install
 
-# 2. Claude Code will ask your preferred language on first run
-# Or set it manually:
-bun src/cli.ts config language en
-
-# 3. Add feeds (or use /discover-feeds in Claude Code)
-bun src/cli.ts add https://example.com/feed.xml --category "Tech"
-
-# 4. Fetch articles
-bun src/cli.ts fetch
-
-# 5. Curate with Claude Code
-# In Claude Code, run: /curate
-
-# 6. Browse results
-bun src/cli.ts serve
+# 2. Start the web UI
+npx tsx src/cli.ts serve
 # Open http://localhost:3000
+
+# 3. Choose your language when prompted on first visit
+
+# 4. Discover feeds — enter a topic in the search box (e.g. "AI", "Rust")
+
+# 5. Click "Update" to fetch articles + AI curate + generate briefing
 ```
 
-## Claude Code Skills
-
-Run these as slash commands in Claude Code:
-
-| Skill | Description |
-|---|---|
-| `/fetch-feeds` | Fetch new articles from all registered feeds |
-| `/curate` | AI-score, summarize, and tag uncurated articles |
-| `/discover-feeds <topic>` | Search the web for RSS feeds on a topic and register them |
+That's it — the Web UI handles everything. For advanced use, see the CLI commands below.
 
 ## CLI Commands
 
 ```
-bun src/cli.ts add <url> [-c category]   # Register RSS feed
-bun src/cli.ts list                      # List registered feeds
-bun src/cli.ts fetch                     # Fetch articles from all feeds
-bun src/cli.ts add-article <url>         # Add single article URL
-bun src/cli.ts articles [--uncurated] [--unread] [--json]
-bun src/cli.ts update <id> --score <n> --summary "..." [--tags "a,b"]
-bun src/cli.ts tag <id> <tags>           # Set tags on an article
-bun src/cli.ts read <id...>              # Mark articles as read
-bun src/cli.ts unread <id...>            # Mark articles as unread
-bun src/cli.ts categorize <id> <cat>     # Set feed category
-bun src/cli.ts profile [--prompt]        # Show reading profile
-bun src/cli.ts serve [--port 3000]       # Start web UI server
-bun src/cli.ts config <key> [value]      # Get/set config
+npx tsx src/cli.ts add <url> [-c category]   # Register RSS feed
+npx tsx src/cli.ts list                      # List registered feeds
+npx tsx src/cli.ts fetch                     # Fetch articles from all feeds
+npx tsx src/cli.ts add-article <url>         # Add single article URL
+npx tsx src/cli.ts articles [--uncurated] [--unread] [--json]
+npx tsx src/cli.ts update <id> --score <n> --summary "..." [--tags "a,b"]
+npx tsx src/cli.ts tag <id> <tags>           # Set tags on an article
+npx tsx src/cli.ts read <id...>              # Mark articles as read
+npx tsx src/cli.ts unread <id...>            # Mark articles as unread
+npx tsx src/cli.ts categorize <id> <cat>     # Set feed category
+npx tsx src/cli.ts profile [--prompt]        # Show reading profile
+npx tsx src/cli.ts serve [--port 3000]       # Start web UI server
+npx tsx src/cli.ts config <key> [value]      # Get/set config
 ```
 
 ## Web UI
 
-Start with `bun src/cli.ts serve` and open http://localhost:3000.
+Start with `npx tsx src/cli.ts serve` and open http://localhost:3000.
 
-- **Two-column layout** — Sidebar with stats, filters, navigation; main area with articles
-- **Tier grouping** — Must Read / Recommended / Worth a Look / Low Priority
+### Views
+
+- **Briefing** — AI-generated daily briefing with topic clusters
+- **All** — All articles (curated and uncurated) grouped by tier
+- **Archive** — Dismissed and archived articles
+- **Feeds** — Manage registered feeds by category
+
+### Features
+
+- **Tier grouping** — Must Read (85-100) / Recommended (70-85) / Worth a Look (50-70) / Low Priority (0-50)
 - **Score ring** — Visual score indicator per article
+- **One-click actions** — Update (fetch + curate + briefing), or run each step individually
+- **Feed discovery** — Enter a topic in the sidebar to discover and add feeds via AI
 - **Filters** — Category, read status, tags (combinable, persisted in URL)
-- **Read tracking** — Click to read, checkbox toggle, mark-all-read per section
-- **Dark/Light theme** — Auto-follows OS, or manually toggle (saved to localStorage)
-- **Summaries** — 2-line preview, expand on hover
+- **Read tracking** — Click to read, checkbox toggle, mark-all-read per section, skip/dismiss
+- **Dark/Light/Auto theme** — Follows OS by default, or manually toggle (saved to localStorage)
+- **Multi-language** — Select your language on first visit; summaries and briefings use it
 
 ## How Curation Works
 
-1. `/fetch-feeds` pulls new articles from all registered RSS feeds
-2. `/curate` reads uncurated articles and for each one:
+1. **Fetch** — pulls new articles from all registered RSS feeds
+2. **Curate** — AI reads uncurated articles and for each one:
    - Scores relevance (0.0-1.0) based on novelty, depth, utility
    - Adjusts scores using your reading profile (preferred/ignored tags)
    - Writes a 2-3 sentence summary in your configured language
    - Assigns 1-3 topic tags
-3. Results appear in the web UI and a Markdown digest is generated
+3. **Briefing** — AI clusters today's curated articles by topic with summaries
+4. Results appear in the Web UI and a Markdown digest is generated
+
+In the Web UI, the **Update** button runs all three steps in sequence.
 
 ## Architecture
 
 ```
-CLI (Bun + TypeScript + SQLite)     Claude Code Skills
-  Data management                     /curate — AI scoring & summaries
-  Feed fetching & parsing             /fetch-feeds — Article collection
-  Web UI server                       /discover-feeds — Feed discovery
+CLI (Node.js + TypeScript + SQLite)     Web UI (SSE-based)
+  Data management                         Update / Fetch / Curate / Briefing
+  Feed fetching & parsing                 Feed discovery
+  Web UI server (http)                    Read/dismiss/filter management
 ```
 
 No API keys needed — Claude Code itself is the AI.
@@ -135,72 +134,61 @@ RSSフィードから記事を収集し、Claude Codeが要約・スコアリン
 
 ## 必要なもの
 
-- [Bun](https://bun.sh/) ランタイム
+- [Node.js](https://nodejs.org/) (v18+)
+- [pnpm](https://pnpm.io/)
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI
 
 ## クイックスタート
 
 ```bash
 # 1. クローンしてインストール
-git clone https://github.com/user/feed-curator.git
+git clone https://github.com/rizumita/feed-curator.git
 cd feed-curator
-bun install
+pnpm install
 
-# 2. 初回起動時にClaude Codeが言語設定を聞きます
-# 手動で設定する場合:
-bun src/cli.ts config language ja
-
-# 3. フィードを追加（Claude Codeで /discover-feeds も可）
-bun src/cli.ts add https://example.com/feed.xml --category "Tech"
-
-# 4. 記事を取得
-bun src/cli.ts fetch
-
-# 5. Claude Codeでキュレーション
-# Claude Codeで: /curate
-
-# 6. 結果をブラウザで確認
-bun src/cli.ts serve
+# 2. Web UIを起動
+npx tsx src/cli.ts serve
 # http://localhost:3000 を開く
+
+# 3. 初回アクセス時に言語を選択
+
+# 4. 検索ボックスにトピックを入力してフィードを発見（例: "AI", "Rust"）
+
+# 5. 「Update」ボタンで記事取得 → AIキュレーション → ブリーフィング生成を一括実行
 ```
 
-## Claude Codeスキル
-
-Claude Codeでスラッシュコマンドとして実行:
-
-| スキル | 説明 |
-|---|---|
-| `/fetch-feeds` | 全登録フィードから新着記事を取得 |
-| `/curate` | 未キュレーション記事をAIでスコアリング・要約・タグ付け |
-| `/discover-feeds <トピック>` | トピックに関するRSSフィードをウェブ検索して登録 |
+Web UIですべて完結します。高度な使い方はCLIコマンドを参照してください。
 
 ## CLIコマンド
 
 ```
-bun src/cli.ts add <url> [-c カテゴリー]  # RSSフィード登録
-bun src/cli.ts list                       # 登録フィード一覧
-bun src/cli.ts fetch                      # 全フィードから記事取得
-bun src/cli.ts add-article <url>          # 単独記事URL追加
-bun src/cli.ts articles [--uncurated] [--unread] [--json]
-bun src/cli.ts update <id> --score <n> --summary "..." [--tags "a,b"]
-bun src/cli.ts tag <id> <tags>            # 記事にタグ設定
-bun src/cli.ts read <id...>               # 既読にする
-bun src/cli.ts unread <id...>             # 未読に戻す
-bun src/cli.ts categorize <id> <cat>      # フィードのカテゴリー設定
-bun src/cli.ts profile [--prompt]         # 読書プロファイル表示
-bun src/cli.ts serve [--port 3000]        # Web UIサーバー起動
-bun src/cli.ts config <key> [value]       # 設定の取得/変更
+npx tsx src/cli.ts add <url> [-c カテゴリー]  # RSSフィード登録
+npx tsx src/cli.ts list                       # 登録フィード一覧
+npx tsx src/cli.ts fetch                      # 全フィードから記事取得
+npx tsx src/cli.ts add-article <url>          # 単独記事URL追加
+npx tsx src/cli.ts articles [--uncurated] [--unread] [--json]
+npx tsx src/cli.ts update <id> --score <n> --summary "..." [--tags "a,b"]
+npx tsx src/cli.ts tag <id> <tags>            # 記事にタグ設定
+npx tsx src/cli.ts read <id...>               # 既読にする
+npx tsx src/cli.ts unread <id...>             # 未読に戻す
+npx tsx src/cli.ts categorize <id> <cat>      # フィードのカテゴリー設定
+npx tsx src/cli.ts profile [--prompt]         # 読書プロファイル表示
+npx tsx src/cli.ts serve [--port 3000]        # Web UIサーバー起動
+npx tsx src/cli.ts config <key> [value]       # 設定の取得/変更
 ```
 
 ## キュレーションの仕組み
 
-1. `/fetch-feeds` で全フィードから新着記事を取得
-2. `/curate` が未キュレーション記事を処理:
+1. **Fetch** — 全フィードから新着記事を取得
+2. **Curate** — AIが未キュレーション記事を処理:
    - 新規性、技術的深さ、実用性に基づきスコアリング (0.0-1.0)
    - 既読履歴のプロファイルに基づきスコアを調整
    - 設定言語で2-3文の要約を生成
    - 1-3個のトピックタグを付与
-3. Web UIとMarkdownダイジェストに結果が反映
+3. **Briefing** — AIが今日のキュレート記事をトピック別にクラスタリングして要約
+4. Web UIとMarkdownダイジェストに結果が反映
+
+Web UIの**Update**ボタンで3ステップを一括実行できます。
 
 ## ライセンス
 

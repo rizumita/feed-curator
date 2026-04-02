@@ -1,10 +1,13 @@
 #!/usr/bin/env node
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { Command } from "commander";
 import { addFeed, listFeeds, updateFeedCategory, fetchAllFeeds, loadStarterFeeds } from "./feed";
 import { addArticle, listArticles, updateArticleCuration, updateArticleTags, markAsRead, markAsUnread, dismissArticles, getAutoArchiveDays, runAutoArchive, saveBriefing, getBriefing, getConfig, setConfig, isPreferenceMemoStale } from "./article";
 import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
 import { aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
+import { generateDigestMarkdown } from "./digest";
 
 const program = new Command();
 program.name("feed-curator").description("AI-powered RSS feed curation tool");
@@ -293,6 +296,29 @@ program
       console.log(`📌 ${cluster.topic} (${cluster.article_ids.length} articles)`);
       console.log(`   ${cluster.summary}`);
       console.log(`   Article IDs: ${cluster.article_ids.join(", ")}\n`);
+    }
+  });
+
+// feed digest
+program
+  .command("digest")
+  .description("Export briefing as a shareable Markdown digest")
+  .option("--date <date>", "Date (YYYY-MM-DD), defaults to today")
+  .option("-o, --output <path>", "Output file path")
+  .action((opts: { date?: string; output?: string }) => {
+    const date = opts.date ?? new Date().toISOString().slice(0, 10);
+    const md = generateDigestMarkdown(date);
+    if (!md) {
+      console.error(`No briefing found for ${date}. Run 'feed-curator start' first.`);
+      process.exit(1);
+    }
+
+    if (opts.output) {
+      mkdirSync(dirname(opts.output), { recursive: true });
+      writeFileSync(opts.output, md, "utf-8");
+      console.log(`Digest written to ${opts.output}`);
+    } else {
+      console.log(md);
     }
   });
 

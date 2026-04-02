@@ -147,6 +147,8 @@ for (const [table, col] of [
   ["feeds", "category TEXT"],
   ["articles", "dismissed_at TEXT"],
   ["articles", "archived_at TEXT"],
+  ["articles", "canonical_url TEXT"],
+  ["articles", "duplicate_of INTEGER REFERENCES articles(id)"],
 ]) {
   try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${col}`);
@@ -157,3 +159,5 @@ for (const [table, col] of [
 
 db.exec("CREATE INDEX IF NOT EXISTS idx_articles_dismissed_at ON articles(dismissed_at)");
 db.exec("CREATE INDEX IF NOT EXISTS idx_articles_archived_at ON articles(archived_at)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_canonical_url ON articles(canonical_url)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_articles_duplicate_of ON articles(duplicate_of)");

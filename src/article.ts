@@ -68,10 +68,11 @@ export function addArticle(
   return result.changes > 0;
 }
 
-export function listArticles(uncuratedOnly: boolean = false): Article[] {
+export function listArticles(uncuratedOnly: boolean = false, limit?: number): Article[] {
   const where = uncuratedOnly ? "WHERE curated_at IS NULL" : "";
+  const limitClause = limit ? `LIMIT ${limit}` : "";
   return db
-    .prepare(`SELECT * FROM articles ${where} ORDER BY fetched_at DESC`)
+    .prepare(`SELECT * FROM articles ${where} ORDER BY fetched_at DESC ${limitClause}`)
     .all() as Article[];
 }
 

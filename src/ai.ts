@@ -34,8 +34,10 @@ function callClaude(prompt: string): Promise<string | null> {
   });
 }
 
+const CURATE_LIMIT = 50;
+
 export async function aiCurate(onProgress?: (msg: string) => void): Promise<number> {
-  const articles = listArticles(true); // uncurated only
+  const articles = listArticles(true, CURATE_LIMIT); // uncurated only, newest first
   if (articles.length === 0) {
     console.log("No uncurated articles.");
     return 0;

@@ -1,6 +1,7 @@
 import { spawnSync } from "child_process";
 import { db } from "./db";
 import { listArticles, updateArticleCuration, saveBriefing } from "./article";
+import { addFeed } from "./feed";
 import { generateProfile, profileForPrompt } from "./profile";
 import type { Article } from "./types";
 
@@ -176,4 +177,44 @@ Respond with ONLY a JSON object (no markdown, no explanation):
     console.error("Failed to parse briefing response:", e);
     return false;
   }
+}
+
+export interface DiscoveredFeed {
+  url: string;
+  title: string;
+  description: string;
+}
+
+export async function aiDiscoverFeeds(topic: string): Promise<DiscoveredFeed[]> {
+  const prompt = `You are an RSS feed discovery assistant. Find RSS/Atom feeds related to this topic: "${topic}"
+
+Search for blogs, news sites, and publications about this topic. For each feed found, verify it's a real RSS/Atom feed URL (ending in /feed, /rss, /atom.xml, /feed.xml, /rss.xml, /index.xml, or similar).
+
+Return ONLY a JSON array (no markdown, no explanation):
+[{"url": "https://example.com/feed.xml", "title": "Site Name", "description": "Brief description of what this feed covers"}]
+
+Guidelines:
+- Find 5-10 high-quality feeds
+- Prefer actively maintained feeds
+- Include a mix of individual blogs and official project blogs
+- Only include publicly accessible feeds (no auth required)
+- Make sure URLs are actual feed URLs, not regular web pages`;
+
+  const response = callClaude(prompt);
+  if (!response) return [];
+
+  try {
+    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+    return JSON.parse(jsonMatch[0]) as DiscoveredFeed[];
+  } catch {
+    return [];
+  }
+}
+
+export function registerDiscoveredFeed(url: string, category?: string): boolean {
+  const result = db.prepare(
+    "INSERT OR IGNORE INTO feeds (url, category) VALUES (?, ?)"
+  ).run(url, category ?? null);
+  return result.changes > 0;
 }

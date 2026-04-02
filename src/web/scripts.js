@@ -211,6 +211,73 @@ function setSort(sort) {
   location.href = qs ? '?' + qs : '/';
 }
 
+// --- Discover Feeds ---
+async function discoverFeeds() {
+  const input = document.getElementById('discover-topic');
+  const btn = document.getElementById('discover-btn');
+  const results = document.getElementById('discover-results');
+  const topic = input.value.trim();
+  if (!topic) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Searching...';
+  results.innerHTML = '<div class="discover-loading">Asking AI to find feeds...</div>';
+
+  try {
+    const res = await fetch('/api/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic })
+    });
+    const data = await res.json();
+
+    if (!data.feeds || data.feeds.length === 0) {
+      results.innerHTML = '<div class="discover-empty">No feeds found.</div>';
+      return;
+    }
+
+    results.innerHTML = data.feeds.map((f, i) =>
+      '<div class="discover-item" id="df-' + i + '">' +
+        '<div class="discover-item-title">' + escapeText(f.title) + '</div>' +
+        '<div class="discover-item-url">' + escapeText(f.url) + '</div>' +
+        '<div class="discover-item-desc">' + escapeText(f.description) + '</div>' +
+        '<button class="discover-add-btn" onclick="registerFeed(' + i + ', \'' + escapeAttr(f.url) + '\', \'' + escapeAttr(topic) + '\')">Add</button>' +
+      '</div>'
+    ).join('');
+  } catch (e) {
+    results.innerHTML = '<div class="discover-empty">Error: ' + e.message + '</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Search';
+  }
+}
+
+async function registerFeed(idx, url, category) {
+  const item = document.getElementById('df-' + idx);
+  const btn = item.querySelector('.discover-add-btn');
+  btn.disabled = true;
+  btn.textContent = 'Adding...';
+
+  const res = await fetch('/api/discover/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, category })
+  });
+  const data = await res.json();
+  btn.textContent = data.added ? 'Added!' : 'Already exists';
+  btn.classList.add('done');
+}
+
+function escapeText(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function escapeAttr(s) {
+  return s.replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
 // Restore filters on load
 setActiveBtn('#read-filters', currentReadFilter);
 setActiveBtn('#category-filters', currentCategoryFilter);

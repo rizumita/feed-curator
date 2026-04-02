@@ -261,6 +261,15 @@ export function renderPage(
         </div>
       </div>` : ""}
 
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Discover Feeds</div>
+        <div class="discover-form">
+          <input type="text" id="discover-topic" placeholder="Topic (e.g. AI, Rust...)" class="discover-input" />
+          <button onclick="discoverFeeds()" id="discover-btn" class="discover-btn">Search</button>
+        </div>
+        <div id="discover-results"></div>
+      </div>
+
       <div class="sidebar-section toc">
         <div class="sidebar-heading">Sections</div>
         <div class="filter-list">

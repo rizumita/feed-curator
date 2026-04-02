@@ -6,6 +6,7 @@ import { db } from "./db";
 import type { Article, Feed } from "./types";
 import { renderPage } from "./web/html";
 import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing } from "./article";
+import { aiDiscoverFeeds, registerDiscoveredFeed } from "./ai";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -165,6 +166,44 @@ export function startServer(port: number = 3000): void {
         const placeholders = ids.map(() => "?").join(",");
         db.prepare(`UPDATE articles SET dismissed_at = datetime('now') WHERE id IN (${placeholders}) AND dismissed_at IS NULL`).run(...ids);
         jsonResponse(res, { ok: true, count: ids.length });
+        return;
+      }
+
+      // POST /api/discover — discover feeds by topic
+      if (url.pathname === "/api/discover" && method === "POST") {
+        let body: any;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          jsonResponse(res, { error: "Invalid JSON" }, 400);
+          return;
+        }
+        const { topic } = body as { topic: unknown };
+        if (typeof topic !== "string" || !topic.trim()) {
+          jsonResponse(res, { error: "topic is required" }, 400);
+          return;
+        }
+        const feeds = await aiDiscoverFeeds(topic.trim());
+        jsonResponse(res, { feeds });
+        return;
+      }
+
+      // POST /api/discover/register — register a discovered feed
+      if (url.pathname === "/api/discover/register" && method === "POST") {
+        let body: any;
+        try {
+          body = JSON.parse(await readBody(req));
+        } catch {
+          jsonResponse(res, { error: "Invalid JSON" }, 400);
+          return;
+        }
+        const { url: feedUrl, category } = body as { url: unknown; category: unknown };
+        if (typeof feedUrl !== "string" || !feedUrl.trim()) {
+          jsonResponse(res, { error: "url is required" }, 400);
+          return;
+        }
+        const added = registerDiscoveredFeed(feedUrl.trim(), typeof category === "string" ? category : undefined);
+        jsonResponse(res, { ok: true, added });
         return;
       }
 

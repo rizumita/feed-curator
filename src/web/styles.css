@@ -495,6 +495,90 @@ footer {
   padding: 1.5rem 0;
 }
 
+/* --- Discover Feeds --- */
+.discover-form {
+  display: flex;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.discover-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.discover-btn {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.discover-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.discover-loading, .discover-empty {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  padding: 0.5rem 0;
+}
+
+.discover-item {
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.discover-item-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.discover-item-url {
+  font-size: 0.625rem;
+  color: var(--text-dim);
+  word-break: break-all;
+}
+
+.discover-item-desc {
+  font-size: 0.6875rem;
+  color: var(--text-dim);
+  margin: 0.25rem 0;
+}
+
+.discover-add-btn {
+  font-size: 0.6875rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.discover-add-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.discover-add-btn.done {
+  border-color: var(--border);
+  color: var(--text-dim);
+  cursor: default;
+}
+
 /* --- Briefing View --- */
 .briefing-header {
   display: flex;

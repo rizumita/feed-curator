@@ -43,6 +43,19 @@ export interface UserProfile {
   dismissedTags: ActionStat[];
 }
 
+// Exponential decay with 30-day half-life
+const HALF_LIFE_DAYS = 30;
+const DECAY_LAMBDA = Math.LN2 / HALF_LIFE_DAYS;
+
+export function decayWeight(dateStr: string | null): number {
+  if (!dateStr) return 0.5; // fallback for missing dates
+  const ts = new Date(dateStr).getTime();
+  if (Number.isNaN(ts)) return 0.5; // invalid date fallback
+  const daysAgo = (Date.now() - ts) / (1000 * 60 * 60 * 24);
+  if (daysAgo < 0) return 1;
+  return Math.max(Number.MIN_VALUE, Math.exp(-DECAY_LAMBDA * daysAgo));
+}
+
 export function generateProfile(): UserProfile {
   const curated = db
     .prepare(
@@ -59,17 +72,41 @@ export function generateProfile(): UserProfile {
   const overallReadRate = totalCurated > 0 ? totalRead / totalCurated : 0;
   const dismissRate = (totalDismissed + totalRead) > 0 ? totalDismissed / (totalDismissed + totalRead) : 0;
 
-  // Tag stats
+  // Single-pass: collect tag, dismiss, and feed stats with time decay
   const tagMap = new Map<string, { total: number; read: number }>();
+  const dismissTagMap = new Map<string, { total: number; dismissed: number }>();
+  const feedMap = new Map<number, { title: string; category: string | null; total: number; read: number }>();
+
   for (const a of curated) {
+    // Feed stats (decay based on read action date)
+    if (a.feed_id) {
+      const fw = decayWeight(a.read_at ?? a.curated_at);
+      const fstat = feedMap.get(a.feed_id) ?? { title: a.feed_title ?? "", category: a.category, total: 0, read: 0 };
+      fstat.total += fw;
+      if (a.read_at) fstat.read += fw;
+      feedMap.set(a.feed_id, fstat);
+    }
+
     if (!a.tags) continue;
-    for (const raw of a.tags.split(",")) {
+    const tags = a.tags.split(",");
+    const readW = decayWeight(a.read_at ?? a.curated_at);
+    const dismissW = decayWeight(a.dismissed_at ?? a.curated_at);
+
+    for (const raw of tags) {
       const tag = raw.trim();
       if (!tag) continue;
-      const stat = tagMap.get(tag) ?? { total: 0, read: 0 };
-      stat.total++;
-      if (a.read_at) stat.read++;
-      tagMap.set(tag, stat);
+
+      // Tag read stats
+      const tstat = tagMap.get(tag) ?? { total: 0, read: 0 };
+      tstat.total += readW;
+      if (a.read_at) tstat.read += readW;
+      tagMap.set(tag, tstat);
+
+      // Tag dismiss stats
+      const dstat = dismissTagMap.get(tag) ?? { total: 0, dismissed: 0 };
+      dstat.total += dismissW;
+      if (a.dismissed_at) dstat.dismissed += dismissW;
+      dismissTagMap.set(tag, dstat);
     }
   }
 
@@ -80,34 +117,10 @@ export function generateProfile(): UserProfile {
   const preferredTags = tagStats.filter((t) => t.readRate > overallReadRate && t.total >= 3);
   const ignoredTags = tagStats.filter((t) => t.readRate < overallReadRate * 0.5 && t.total >= 3);
 
-  // Dismissed tag stats
-  const dismissTagMap = new Map<string, { total: number; dismissed: number }>();
-  for (const a of curated) {
-    if (!a.tags) continue;
-    for (const raw of a.tags.split(",")) {
-      const tag = raw.trim();
-      if (!tag) continue;
-      const stat = dismissTagMap.get(tag) ?? { total: 0, dismissed: 0 };
-      stat.total++;
-      if (a.dismissed_at) stat.dismissed++;
-      dismissTagMap.set(tag, stat);
-    }
-  }
-
   const dismissedTags: ActionStat[] = [...dismissTagMap.entries()]
     .map(([tag, s]) => ({ tag, total: s.total, count: s.dismissed, rate: s.total > 0 ? s.dismissed / s.total : 0 }))
     .filter((t) => t.rate > dismissRate && t.total >= 3)
     .sort((a, b) => b.rate - a.rate);
-
-  // Feed stats
-  const feedMap = new Map<number, { title: string; category: string | null; total: number; read: number }>();
-  for (const a of curated) {
-    if (!a.feed_id) continue;
-    const stat = feedMap.get(a.feed_id) ?? { title: a.feed_title ?? "", category: a.category, total: 0, read: 0 };
-    stat.total++;
-    if (a.read_at) stat.read++;
-    feedMap.set(a.feed_id, stat);
-  }
 
   const feedStats: FeedStat[] = [...feedMap.entries()]
     .map(([feed_id, s]) => ({ feed_id, ...s, readRate: s.total > 0 ? s.read / s.total : 0 }))
@@ -142,14 +155,14 @@ export function formatProfile(p: UserProfile): string {
   if (p.preferredTags.length > 0) {
     out += "\nPreferred Tags (read rate above average):\n";
     for (const t of p.preferredTags) {
-      out += `  ${t.tag}: ${t.read}/${t.total} (${(t.readRate * 100).toFixed(0)}%)\n`;
+      out += `  ${t.tag}: ${Math.round(t.read)}/${Math.round(t.total)} (${(t.readRate * 100).toFixed(0)}%)\n`;
     }
   }
 
   if (p.ignoredTags.length > 0) {
     out += "\nIgnored Tags (read rate below 50% of average):\n";
     for (const t of p.ignoredTags) {
-      out += `  ${t.tag}: ${t.read}/${t.total} (${(t.readRate * 100).toFixed(0)}%)\n`;
+      out += `  ${t.tag}: ${Math.round(t.read)}/${Math.round(t.total)} (${(t.readRate * 100).toFixed(0)}%)\n`;
     }
   }
 
@@ -158,14 +171,14 @@ export function formatProfile(p: UserProfile): string {
   if (p.dismissedTags.length > 0) {
     out += "\nFrequently Dismissed Tags:\n";
     for (const t of p.dismissedTags) {
-      out += `  ${t.tag}: ${t.count}/${t.total} dismissed (${(t.rate * 100).toFixed(0)}%)\n`;
+      out += `  ${t.tag}: ${Math.round(t.count)}/${Math.round(t.total)} dismissed (${(t.rate * 100).toFixed(0)}%)\n`;
     }
   }
 
   out += "\nFeed Engagement:\n";
   for (const f of p.feedStats) {
     const cat = f.category ? ` [${f.category}]` : "";
-    out += `  ${f.title || "Feed " + f.feed_id}${cat}: ${f.read}/${f.total} (${(f.readRate * 100).toFixed(0)}%)\n`;
+    out += `  ${f.title || "Feed " + f.feed_id}${cat}: ${Math.round(f.read)}/${Math.round(f.total)} (${(f.readRate * 100).toFixed(0)}%)\n`;
   }
 
   return out;
@@ -195,6 +208,15 @@ export function profileForPrompt(p: UserProfile): string {
     prompt += `- Frequently dismissed tags (user skips these): ${dismissed}\n`;
   }
 
-  prompt += "\nAdjust scores accordingly: boost articles matching preferred tags/sources, lower scores for ignored and dismissed tags.";
+  // Include score band reading patterns
+  const activeBands = p.scoreBands.filter((b) => b.total > 0);
+  if (activeBands.length > 0) {
+    prompt += "- Reading patterns by score tier:\n";
+    for (const b of activeBands) {
+      prompt += `    ${b.band}: ${(b.readRate * 100).toFixed(0)}% read rate (${b.read}/${b.total})\n`;
+    }
+  }
+
+  prompt += "\nAdjust scores accordingly: boost articles matching preferred tags/sources, lower scores for ignored and dismissed tags. Use score band patterns to calibrate scoring thresholds.";
   return prompt;
 }

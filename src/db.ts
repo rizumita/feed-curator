@@ -1,5 +1,5 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "fs";
+import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
 
@@ -7,7 +7,72 @@ const DEFAULT_DIR = join(homedir(), ".feed-curator");
 const DB_PATH = process.env.DB_PATH ?? join(DEFAULT_DIR, "feed-curator.db");
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
-export const db = new Database(DB_PATH);
+// Initialize sql.js (WASM-based, no native build required)
+const SQL = await initSqlJs();
+
+const fileBuffer = existsSync(DB_PATH) ? readFileSync(DB_PATH) : undefined;
+const sqlDb: SqlJsDatabase = fileBuffer
+  ? new SQL.Database(fileBuffer)
+  : new SQL.Database();
+
+function save(): void {
+  const data = sqlDb.export();
+  writeFileSync(DB_PATH, Buffer.from(data));
+  // export() resets PRAGMA settings — re-apply foreign keys
+  sqlDb.run("PRAGMA foreign_keys = ON");
+}
+
+// Wrapper exposing better-sqlite3-compatible synchronous API
+class CompatDatabase {
+  prepare(sql: string) {
+    return {
+      get(...params: unknown[]): unknown {
+        const stmt = sqlDb.prepare(sql);
+        try {
+          if (params.length > 0) stmt.bind(params);
+          if (stmt.step()) {
+            return stmt.getAsObject();
+          }
+          return undefined;
+        } finally {
+          stmt.free();
+        }
+      },
+
+      all(...params: unknown[]): unknown[] {
+        const stmt = sqlDb.prepare(sql);
+        const results: unknown[] = [];
+        try {
+          if (params.length > 0) stmt.bind(params);
+          while (stmt.step()) {
+            results.push(stmt.getAsObject());
+          }
+          return results;
+        } finally {
+          stmt.free();
+        }
+      },
+
+      run(...params: unknown[]): { changes: number } {
+        sqlDb.run(sql, params as any[]);
+        const changes = sqlDb.getRowsModified();
+        save();
+        return { changes };
+      },
+    };
+  }
+
+  exec(sql: string): void {
+    sqlDb.exec(sql);
+    save();
+  }
+
+  pragma(str: string): void {
+    sqlDb.run(`PRAGMA ${str}`);
+  }
+}
+
+export const db = new CompatDatabase();
 
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");

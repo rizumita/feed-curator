@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { formatProfile, profileForPrompt, type UserProfile } from "./profile";
+import { decayWeight, formatProfile, profileForPrompt, type UserProfile } from "./profile";
 
 function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
   return {
@@ -21,6 +21,39 @@ function makeProfile(overrides: Partial<UserProfile> = {}): UserProfile {
     ...overrides,
   };
 }
+
+// ─── decayWeight ───
+
+describe("decayWeight", () => {
+  test("returns 1.0 for today", () => {
+    const today = new Date().toISOString();
+    expect(decayWeight(today)).toBeCloseTo(1.0, 1);
+  });
+
+  test("returns ~0.5 at 30 days (half-life)", () => {
+    const d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    expect(decayWeight(d)).toBeCloseTo(0.5, 1);
+  });
+
+  test("returns ~0.25 at 60 days", () => {
+    const d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    expect(decayWeight(d)).toBeCloseTo(0.25, 1);
+  });
+
+  test("returns 0.5 for null", () => {
+    expect(decayWeight(null)).toBe(0.5);
+  });
+
+  test("returns 1.0 for future dates", () => {
+    const future = new Date(Date.now() + 86400000).toISOString();
+    expect(decayWeight(future)).toBe(1);
+  });
+
+  test("returns 0.5 for invalid date strings", () => {
+    expect(decayWeight("not-a-date")).toBe(0.5);
+    expect(decayWeight("")).toBe(0.5);
+  });
+});
 
 // ─── formatProfile ───
 
@@ -139,6 +172,24 @@ describe("profileForPrompt", () => {
     expect(out).not.toContain("Preferred tags");
     expect(out).not.toContain("Ignored tags");
     expect(out).not.toContain("Preferred sources");
+  });
+
+  test("includes score band reading patterns", () => {
+    const out = profileForPrompt(makeProfile());
+    expect(out).toContain("Reading patterns by score tier:");
+    expect(out).toContain("0.85-1.0 (Must Read): 80% read rate (4/5)");
+    expect(out).toContain("0.00-0.49 (Low Priority): 20% read rate (1/5)");
+  });
+
+  test("omits score bands when all empty", () => {
+    const out = profileForPrompt(
+      makeProfile({
+        scoreBands: [
+          { band: "0.85-1.0 (Must Read)", total: 0, read: 0, readRate: 0 },
+        ],
+      })
+    );
+    expect(out).not.toContain("Reading patterns by score tier:");
   });
 
   test("always includes score adjustment instruction", () => {

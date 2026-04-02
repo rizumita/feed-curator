@@ -53,9 +53,10 @@ describe("database schema", () => {
     expect(names).toContain("idx_articles_score");
   });
 
-  test("WAL mode is enabled", () => {
+  test("journal mode is set", () => {
     const result = db.prepare("PRAGMA journal_mode").get() as any;
-    expect(result.journal_mode).toBe("wal");
+    // sql.js (WASM) uses "memory" for in-memory databases; better-sqlite3 uses "wal"
+    expect(["wal", "memory"]).toContain(result.journal_mode);
   });
 
   test("foreign keys are enabled", () => {

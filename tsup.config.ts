@@ -9,6 +9,7 @@ export default defineConfig({
   clean: true,
   splitting: false,
   sourcemap: false,
+  external: ["sql.js"],
   async onSuccess() {
     cpSync("src/web", "dist/web", { recursive: true });
   },

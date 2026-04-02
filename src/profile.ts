@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { getPreferenceMemo } from "./article";
+import { getPreferenceMemo } from "./preferences";
 
 interface TagStat {
   tag: string;

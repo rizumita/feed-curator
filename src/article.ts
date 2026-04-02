@@ -1,6 +1,12 @@
 import { db } from "./db";
 import { canonicalizeUrl } from "./dedupe";
-import type { Article, Briefing, BriefingCluster } from "./types";
+import type { Article } from "./types";
+
+// Re-exports for backward compatibility
+export { getConfig, setConfig, getAutoArchiveDays, runAutoArchive } from "./config";
+export { saveBriefing, getBriefing, getTodayBriefing } from "./briefing-data";
+export { getPreferenceMemo, savePreferenceMemo, isPreferenceMemoStale, getRecentActions } from "./preferences";
+export type { RecentAction } from "./preferences";
 
 export type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
 
@@ -138,104 +144,4 @@ export function dismissArticles(ids: number[]): void {
 
 export function undismissArticle(id: number): void {
   db.prepare("UPDATE articles SET dismissed_at = NULL WHERE id = ?").run(id);
-}
-
-export function getAutoArchiveDays(): number {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'auto_archive_days'").get() as { value: string } | null;
-  if (!row) return 7;
-  const days = parseInt(row.value, 10);
-  return Number.isFinite(days) && days > 0 ? days : 7;
-}
-
-export function runAutoArchive(days: number): number {
-  if (!Number.isFinite(days) || days <= 0) return 0;
-  const result = db.prepare(
-    `UPDATE articles
-     SET archived_at = datetime('now')
-     WHERE curated_at IS NOT NULL
-       AND read_at IS NULL
-       AND dismissed_at IS NULL
-       AND archived_at IS NULL
-       AND COALESCE(
-         datetime(COALESCE(published_at, fetched_at), '+' || ? || ' days'),
-         datetime(fetched_at, '+' || ? || ' days')
-       ) < datetime('now')`
-  ).run(days, days);
-  return result.changes;
-}
-
-export function saveBriefing(date: string, clusters: BriefingCluster[]): void {
-  db.prepare(
-    "INSERT OR REPLACE INTO briefings (date, clusters) VALUES (?, ?)"
-  ).run(date, JSON.stringify(clusters));
-}
-
-export function getBriefing(date: string): Briefing | null {
-  return (
-    (db.prepare("SELECT * FROM briefings WHERE date = ?").get(date) as Briefing) ?? null
-  );
-}
-
-export function getTodayBriefing(): Briefing | null {
-  const today = new Date().toISOString().slice(0, 10);
-  return getBriefing(today);
-}
-
-export function getConfig(key: string): string | null {
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as { value: string } | null;
-  return row?.value ?? null;
-}
-
-export function setConfig(key: string, value: string): void {
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, value);
-}
-
-// --- Preference memo helpers ---
-
-export function getPreferenceMemo(): string | null {
-  return getConfig("preference_memo");
-}
-
-export function savePreferenceMemo(memo: string): void {
-  setConfig("preference_memo", memo);
-  setConfig("preference_memo_updated_at", new Date().toISOString());
-}
-
-export function isPreferenceMemoStale(): boolean {
-  const updatedAt = getConfig("preference_memo_updated_at");
-  if (!updatedAt) return true; // never generated
-
-  const elapsed = Date.now() - new Date(updatedAt).getTime();
-  if (Number.isNaN(elapsed)) return true; // invalid date → treat as stale
-  const oneDayMs = 24 * 60 * 60 * 1000;
-  if (elapsed < oneDayMs) return false;
-
-  // Check if enough new actions since last memo update
-  const newActions = db.prepare(
-    `SELECT COUNT(*) as cnt FROM articles
-     WHERE (read_at > ? OR dismissed_at > ?)
-       AND curated_at IS NOT NULL`
-  ).get(updatedAt, updatedAt) as { cnt: number };
-  return newActions.cnt >= 20;
-}
-
-export interface RecentAction {
-  title: string | null;
-  summary: string | null;
-  tags: string | null;
-  score: number | null;
-  action: "read" | "dismissed";
-}
-
-export function getRecentActions(days: number, limit: number): RecentAction[] {
-  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  return db.prepare(
-    `SELECT title, summary, tags, score,
-            CASE WHEN read_at IS NOT NULL THEN 'read' ELSE 'dismissed' END as action
-     FROM articles
-     WHERE curated_at IS NOT NULL
-       AND (read_at > ? OR dismissed_at > ?)
-     ORDER BY COALESCE(read_at, dismissed_at) DESC
-     LIMIT ?`
-  ).all(cutoff, cutoff, limit) as RecentAction[];
 }

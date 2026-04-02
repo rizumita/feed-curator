@@ -1,4 +1,4 @@
-import { getBriefing } from "./article";
+import { getBriefing } from "./briefing-data";
 import { db } from "./db";
 import type { Article, BriefingCluster } from "./types";
 

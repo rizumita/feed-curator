@@ -3,7 +3,10 @@ import { readFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { renderPage } from "./web/html";
-import { getAutoArchiveDays, runAutoArchive, getBriefing, getTodayBriefing, getCuratedArticles, getActiveArticles, getStats, toggleRead, markAsRead, dismissArticle, dismissArticles, getConfig, setConfig, isPreferenceMemoStale } from "./article";
+import { getCuratedArticles, getActiveArticles, getStats, toggleRead, markAsRead, dismissArticle, dismissArticles } from "./article";
+import { getBriefing, getTodayBriefing } from "./briefing-data";
+import { getConfig, setConfig, getAutoArchiveDays, runAutoArchive } from "./config";
+import { isPreferenceMemoStale } from "./preferences";
 import { aiDiscoverFeeds, aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
 import { addFeed, fetchAllFeeds, listFeeds, removeFeed } from "./feed";
 
@@ -22,6 +25,23 @@ function readBody(req: import("http").IncomingMessage): Promise<string> {
     req.on("end", () => resolve(data));
     req.on("error", reject);
   });
+}
+
+async function parseJsonBody(req: import("http").IncomingMessage, res: import("http").ServerResponse): Promise<any | null> {
+  try {
+    return JSON.parse(await readBody(req));
+  } catch {
+    jsonResponse(res, { error: "Invalid JSON" }, 400);
+    return null;
+  }
+}
+
+function validateIds(ids: unknown, res: import("http").ServerResponse): number[] | null {
+  if (!Array.isArray(ids) || ids.length > 1000) {
+    jsonResponse(res, { error: "ids must be an array with at most 1000 elements" }, 400);
+    return null;
+  }
+  return ids.filter((id: unknown) => typeof id === "number" && Number.isInteger(id) && id > 0);
 }
 
 function sseHandler(
@@ -87,22 +107,11 @@ export function startServer(port: number = 3000): import("http").Server {
       }
 
       if (url.pathname === "/api/read-batch" && method === "POST") {
-        let body: any;
-        try {
-          body = JSON.parse(await readBody(req));
-        } catch {
-          jsonResponse(res, { error: "Invalid JSON" }, 400);
-          return;
-        }
-        const { ids } = body as { ids: unknown };
-        if (!Array.isArray(ids) || ids.length > 1000) {
-          jsonResponse(res, { error: "ids must be an array with at most 1000 elements" }, 400);
-          return;
-        }
-        const validIds = ids.filter((id: unknown) => typeof id === "number" && Number.isInteger(id) && id > 0);
-        for (const id of validIds) {
-          markAsRead(id);
-        }
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
+        const validIds = validateIds(body.ids, res);
+        if (validIds === null) return;
+        for (const id of validIds) markAsRead(id);
         jsonResponse(res, { ok: true, count: validIds.length });
         return;
       }
@@ -125,24 +134,11 @@ export function startServer(port: number = 3000): import("http").Server {
 
       // POST /api/dismiss-batch
       if (url.pathname === "/api/dismiss-batch" && method === "POST") {
-        let body: any;
-        try {
-          body = JSON.parse(await readBody(req));
-        } catch {
-          jsonResponse(res, { error: "Invalid JSON" }, 400);
-          return;
-        }
-        const { ids } = body as { ids: unknown };
-        if (!Array.isArray(ids) || ids.length > 1000) {
-          jsonResponse(res, { error: "ids must be an array with at most 1000 elements" }, 400);
-          return;
-        }
-        const validIds = ids.filter((id: unknown) => typeof id === "number" && Number.isInteger(id) && id > 0);
-        if (validIds.length === 0) {
-          jsonResponse(res, { ok: true, count: 0 });
-          return;
-        }
-        dismissArticles(validIds);
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
+        const validIds = validateIds(body.ids, res);
+        if (validIds === null) return;
+        if (validIds.length > 0) dismissArticles(validIds);
         jsonResponse(res, { ok: true, count: validIds.length });
         return;
       }
@@ -215,13 +211,8 @@ export function startServer(port: number = 3000): import("http").Server {
 
       // POST /api/discover — discover feeds by topic (SSE)
       if (url.pathname === "/api/discover" && method === "POST") {
-        let body: any;
-        try {
-          body = JSON.parse(await readBody(req));
-        } catch {
-          jsonResponse(res, { error: "Invalid JSON" }, 400);
-          return;
-        }
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
         const { topic } = body as { topic: unknown };
         if (typeof topic !== "string" || !topic.trim()) {
           jsonResponse(res, { error: "topic is required" }, 400);
@@ -236,13 +227,8 @@ export function startServer(port: number = 3000): import("http").Server {
 
       // POST /api/discover/register — register a discovered feed
       if (url.pathname === "/api/discover/register" && method === "POST") {
-        let body: any;
-        try {
-          body = JSON.parse(await readBody(req));
-        } catch {
-          jsonResponse(res, { error: "Invalid JSON" }, 400);
-          return;
-        }
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
         const { url: feedUrl, category } = body as { url: unknown; category: unknown };
         if (typeof feedUrl !== "string" || !feedUrl.trim()) {
           jsonResponse(res, { error: "url is required" }, 400);
@@ -259,13 +245,8 @@ export function startServer(port: number = 3000): import("http").Server {
 
       // POST /api/config/language — set language
       if (url.pathname === "/api/config/language" && method === "POST") {
-        let body: any;
-        try {
-          body = JSON.parse(await readBody(req));
-        } catch {
-          jsonResponse(res, { error: "Invalid JSON" }, 400);
-          return;
-        }
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
         const { language } = body as { language: unknown };
         if (typeof language !== "string" || !language.trim()) {
           jsonResponse(res, { error: "language is required" }, 400);

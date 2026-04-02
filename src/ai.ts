@@ -51,8 +51,39 @@ function callClaude(prompt: string): Promise<string | null> {
 
 const CURATE_LIMIT = 50;
 
+/** Extract head (500 chars) + tail (300 chars) for token-efficient curation */
+function prepareArticleSnippet(a: import("./types").Article) {
+  const content = a.content ?? "";
+  const head = content.slice(0, 500);
+  const tail = content.length > 800 ? content.slice(-300) : "";
+  return {
+    id: a.id,
+    title: a.title,
+    url: a.url,
+    content_head: head,
+    ...(tail && { content_tail: tail }),
+    content_length: content.length,
+  };
+}
+
+/** Rank articles by blended score: 70% curation score + 30% freshness (14-day window) */
+function rankByBlendedScore(articles: import("./types").Article[]): import("./types").Article[] {
+  const now = Date.now();
+  const maxAge = 14 * 24 * 60 * 60 * 1000;
+  return articles
+    .map(a => {
+      const score = a.score ?? 0;
+      const ts = new Date(a.published_at ?? a.fetched_at).getTime();
+      const age = Number.isNaN(ts) ? maxAge : now - ts;
+      const freshness = Math.max(0, 1 - age / maxAge);
+      return { article: a, blended: 0.7 * score + 0.3 * freshness };
+    })
+    .sort((a, b) => b.blended - a.blended)
+    .map(r => r.article);
+}
+
 export async function aiCurate(onProgress?: (msg: string) => void): Promise<number> {
-  const articles = listArticles(true, CURATE_LIMIT); // uncurated only, newest first
+  const articles = listArticles(true, CURATE_LIMIT);
   if (articles.length === 0) {
     console.log("No uncurated articles.");
     return 0;
@@ -62,7 +93,6 @@ export async function aiCurate(onProgress?: (msg: string) => void): Promise<numb
   const profile = generateProfile();
   const profilePrompt = profileForPrompt(profile);
 
-  // Process in batches to avoid token limits
   const batchSize = 10;
   let curated = 0;
   const totalBatches = Math.ceil(articles.length / batchSize);
@@ -70,19 +100,7 @@ export async function aiCurate(onProgress?: (msg: string) => void): Promise<numb
   for (let i = 0; i < articles.length; i += batchSize) {
     const batch = articles.slice(i, i + batchSize);
     const batchNum = Math.floor(i / batchSize) + 1;
-    const articlesJson = batch.map(a => {
-      const content = a.content ?? "";
-      const head = content.slice(0, 500);
-      const tail = content.length > 800 ? content.slice(-300) : "";
-      return {
-        id: a.id,
-        title: a.title,
-        url: a.url,
-        content_head: head,
-        ...(tail && { content_tail: tail }),
-        content_length: content.length,
-      };
-    });
+    const articlesJson = batch.map(prepareArticleSnippet);
 
     const prompt = `You are a feed curator. Score, summarize, and tag these articles.
 
@@ -161,22 +179,9 @@ export async function aiBriefing(onProgress?: (msg: string) => void): Promise<bo
     return false;
   }
 
-  // Rank candidates by blended score (70% curation score + 30% freshness)
-  const now = Date.now();
-  const maxAge = 14 * 24 * 60 * 60 * 1000; // 14 days
-  const ranked = unread
-    .map(a => {
-      const score = a.score ?? 0;
-      const ts = new Date(a.published_at ?? a.fetched_at).getTime();
-      const age = Number.isNaN(ts) ? maxAge : now - ts;
-      const freshness = Math.max(0, 1 - age / maxAge);
-      return { article: a, blended: 0.7 * score + 0.3 * freshness };
-    })
-    .sort((a, b) => b.blended - a.blended);
-
-  // Use briefing_max_articles config to limit candidates sent to AI (multiply by 3 for selection pool)
+  const ranked = rankByBlendedScore(unread);
   const candidateLimit = Math.min(ranked.length, maxArticles * 3, 50);
-  const candidates = ranked.slice(0, candidateLimit).map(r => r.article);
+  const candidates = ranked.slice(0, candidateLimit);
 
   const articlesJson = candidates.map(a => ({
     id: a.id,

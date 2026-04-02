@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "vitest";
+import { describe, expect, test, beforeEach, afterAll } from "vitest";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { db } from "./db";
@@ -21,6 +21,10 @@ function writeTmpJson(filename: string, content: unknown): string {
 describe("loadStarterFeeds", () => {
   beforeEach(() => {
     clearFeeds();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 

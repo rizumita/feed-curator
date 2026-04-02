@@ -6,6 +6,21 @@ Your reading history trains the curation — the more you read and dismiss, the 
 
 [日本語版は下にあります / Japanese version below](#feed-curator-1)
 
+<p align="center">
+  <img src="docs/screenshots/briefing-view.png" alt="Briefing View — AI-generated daily briefing with topic clusters" width="800">
+</p>
+<p align="center"><em>Daily Briefing — AI clusters articles by topic and summarizes each group</em></p>
+
+<details>
+<summary>More screenshots</summary>
+
+| All Articles | Feed Management |
+|:---:|:---:|
+| <img src="docs/screenshots/all-view.png" alt="All View" width="400"> | <img src="docs/screenshots/feeds-view.png" alt="Feeds View" width="400"> |
+| Score-ranked articles with tier grouping | Manage feeds by category |
+
+</details>
+
 ---
 
 ## Features
@@ -147,6 +162,21 @@ No API keys needed — Claude Code itself is the AI.
 Claude Codeで動く、APIキー不要の、開発者向けパーソナル技術朝刊。
 
 読んだ記事・スキップした記事から嗜好を学習し、毎日のブリーフィングを最適化します。
+
+<p align="center">
+  <img src="docs/screenshots/briefing-view.png" alt="ブリーフィングビュー" width="800">
+</p>
+<p align="center"><em>日次ブリーフィング — AIが記事をトピック別にクラスタリングして要約</em></p>
+
+<details>
+<summary>その他のスクリーンショット</summary>
+
+| 記事一覧 | フィード管理 |
+|:---:|:---:|
+| <img src="docs/screenshots/all-view.png" alt="全記事ビュー" width="400"> | <img src="docs/screenshots/feeds-view.png" alt="フィードビュー" width="400"> |
+| スコア順・ティア別の記事表示 | カテゴリー別のフィード管理 |
+
+</details>
 
 ## 特徴
 

@@ -1,5 +1,8 @@
 import type { Briefing, BriefingCluster } from "../types";
 import type { ArticleWithFeed } from "../article";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const { version } = require("../../package.json");
 
 interface Tier {
   id: string;
@@ -228,7 +231,7 @@ export function renderPage(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Feed Curator</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=${version}">
 </head>
 <body>
   <div class="layout">
@@ -385,7 +388,7 @@ export function renderPage(
     </main>
   </div>
 
-  <script src="/scripts.js"></script>
+  <script src="/scripts.js?v=${version}"></script>
 </body>
 </html>`;
 }

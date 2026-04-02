@@ -138,7 +138,6 @@ No API keys needed — Claude Code itself is the AI.
 
 ### Next
 
-- [Explicit feedback (like/dislike)](https://github.com/rizumita/feed-curator/issues/6) — Direct signals beyond read/dismiss
 - [Cross-feed duplicate detection](https://github.com/rizumita/feed-curator/issues/8) — Deduplicate overlapping articles
 - [Two-stage curation (fast pass + precision re-rank)](https://github.com/rizumita/feed-curator/issues/9) — Speed up large feed sets
 - [Full-text re-curation for promising articles](https://github.com/rizumita/feed-curator/issues/10) — Deeper analysis for top candidates
@@ -255,7 +254,6 @@ Web UIの**Update**ボタンで3ステップを一括実行できます。
 
 ### 次のリリース
 
-- [明示的フィードバック (like/dislike)](https://github.com/rizumita/feed-curator/issues/6) — 既読/スキップ以外の直接的なシグナル
 - [クロスフィード重複検出](https://github.com/rizumita/feed-curator/issues/8) — 重複記事の自動検出
 - [2段階キュレーション](https://github.com/rizumita/feed-curator/issues/9) — 高速パス＋精密リランクで大量フィードに対応
 - [有望記事のフルテキスト再キュレーション](https://github.com/rizumita/feed-curator/issues/10) — 上位候補をより深く分析

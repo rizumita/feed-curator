@@ -15,12 +15,26 @@ const sqlDb: SqlJsDatabase = fileBuffer
   ? new SQL.Database(fileBuffer)
   : new SQL.Database();
 
-function save(): void {
+// Deferred save: export() resets PRAGMA and last_insert_rowid(),
+// so we batch writes and flush after synchronous code completes.
+let dirty = false;
+
+function flush(): void {
+  if (!dirty) return;
   const data = sqlDb.export();
   writeFileSync(DB_PATH, Buffer.from(data));
-  // export() resets PRAGMA settings — re-apply foreign keys
   sqlDb.run("PRAGMA foreign_keys = ON");
+  dirty = false;
 }
+
+function scheduleSave(): void {
+  if (!dirty) {
+    dirty = true;
+    queueMicrotask(flush);
+  }
+}
+
+process.on("exit", flush);
 
 // Wrapper exposing better-sqlite3-compatible synchronous API
 class CompatDatabase {
@@ -56,7 +70,7 @@ class CompatDatabase {
       run(...params: unknown[]): { changes: number } {
         sqlDb.run(sql, params as any[]);
         const changes = sqlDb.getRowsModified();
-        save();
+        scheduleSave();
         return { changes };
       },
     };
@@ -64,7 +78,7 @@ class CompatDatabase {
 
   exec(sql: string): void {
     sqlDb.exec(sql);
-    save();
+    scheduleSave();
   }
 
   pragma(str: string): void {

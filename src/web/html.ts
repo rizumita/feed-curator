@@ -182,6 +182,48 @@ function renderBriefingView(briefing: Briefing, articles: ArticleWithFeed[]): st
 
 import type { Feed } from "../types";
 
+function renderMainContent(opts: {
+  view: string; stats: Stats; feeds: Feed[]; briefing: Briefing | null;
+  articles: ArticleWithFeed[]; now: string; sectionHtml: string;
+}): string {
+  const { view, stats, feeds, briefing, articles, now, sectionHtml } = opts;
+
+  if (stats.feeds === 0 && view !== "feeds") {
+    return `<div class="onboarding">
+      <h1>Welcome to Feed Curator</h1>
+      <p>Get started by finding feeds to follow.</p>
+      <div class="onboarding-search">
+        <input type="text" id="onboard-topic" placeholder="Enter a topic (e.g. AI, Rust, TypeScript...)" class="onboarding-input" />
+        <button id="onboard-search-btn" onclick="document.getElementById('discover-topic').value=document.getElementById('onboard-topic').value;discoverFeeds()" class="onboarding-btn">Search Feeds</button>
+      </div>
+    </div>`;
+  }
+  if (stats.feeds > 0 && stats.curated === 0 && view === "briefing") {
+    return `<div class="onboarding">
+      <h1>Feeds Ready</h1>
+      <p>${stats.feeds} feed(s) registered. Fetch articles and let AI curate them.</p>
+      <button onclick="runUpdate()" class="onboarding-btn update-btn">Update Now</button>
+    </div>`;
+  }
+  if (view === "feeds") return renderFeedsView(feeds);
+  if (view === "briefing" && briefing) {
+    return `<div class="briefing-header">
+      <h1>Today's Briefing</h1>
+      <span class="briefing-date">${now}</span>
+    </div>
+    ${renderBriefingView(briefing, articles)}
+    <div class="briefing-footer">
+      <a href="?view=all" class="see-all-link">See all ${stats.unread} unread articles &rarr;</a>
+    </div>`;
+  }
+  if (articles.length > 0) return sectionHtml;
+  return `<div class="onboarding">
+    <h1>No curated articles yet</h1>
+    <p>Fetch articles and let AI curate them.</p>
+    <button onclick="runUpdate()" class="onboarding-btn update-btn">Update Now</button>
+  </div>`;
+}
+
 export function renderPage(
   articles: ArticleWithFeed[],
   stats: Stats,
@@ -349,43 +391,7 @@ export function renderPage(
         </div>
       </div>` : ""}
       <div id="discover-results" class="discover-results-main" style="display:none"></div>
-      ${
-        // Onboarding: no feeds registered → show discover UI
-        stats.feeds === 0 && view !== "feeds"
-          ? `<div class="onboarding">
-              <h1>Welcome to Feed Curator</h1>
-              <p>Get started by finding feeds to follow.</p>
-              <div class="onboarding-search">
-                <input type="text" id="onboard-topic" placeholder="Enter a topic (e.g. AI, Rust, TypeScript...)" class="onboarding-input" />
-                <button id="onboard-search-btn" onclick="document.getElementById('discover-topic').value=document.getElementById('onboard-topic').value;discoverFeeds()" class="onboarding-btn">Search Feeds</button>
-              </div>
-            </div>`
-        // Onboarding: feeds exist but no curated articles → prompt to update
-        : stats.feeds > 0 && stats.curated === 0 && view === "briefing"
-          ? `<div class="onboarding">
-              <h1>Feeds Ready</h1>
-              <p>${stats.feeds} feed(s) registered. Fetch articles and let AI curate them.</p>
-              <button onclick="runUpdate()" class="onboarding-btn update-btn">Update Now</button>
-            </div>`
-        : view === "feeds"
-          ? renderFeedsView(feeds ?? [])
-          : view === "briefing" && briefing
-            ? `<div class="briefing-header">
-                 <h1>Today's Briefing</h1>
-                 <span class="briefing-date">${now}</span>
-               </div>
-               ${renderBriefingView(briefing, articles)}
-               <div class="briefing-footer">
-                 <a href="?view=all" class="see-all-link">See all ${stats.unread} unread articles &rarr;</a>
-               </div>`
-            : articles.length > 0
-              ? sectionHtml
-              : `<div class="onboarding">
-                  <h1>No curated articles yet</h1>
-                  <p>Fetch articles and let AI curate them.</p>
-                  <button onclick="runUpdate()" class="onboarding-btn update-btn">Update Now</button>
-                </div>`
-      }
+      ${renderMainContent({ view, stats, feeds: feeds ?? [], briefing: briefing ?? null, articles, now, sectionHtml })}
       <footer>Feed Curator &mdash; AI-powered curation by Claude Code</footer>
     </main>
   </div>

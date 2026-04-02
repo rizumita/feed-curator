@@ -11,7 +11,7 @@ function extractJson(response: string, type: "array" | "object"): string | null 
 
 function callClaude(prompt: string): Promise<string | null> {
   return new Promise((resolve) => {
-    const proc = spawn("claude", ["-p", prompt]);
+    const proc = spawn("claude", ["-p", "--output-format", "json", prompt]);
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
@@ -25,7 +25,18 @@ function callClaude(prompt: string): Promise<string | null> {
         resolve(null);
         return;
       }
-      resolve(stdout.trim());
+      try {
+        const json = JSON.parse(stdout);
+        if (json.is_error) {
+          console.error("claude CLI returned error:", json.result);
+          resolve(null);
+          return;
+        }
+        resolve((json.result as string)?.trim() ?? null);
+      } catch {
+        // Fallback: treat stdout as plain text (older CLI versions)
+        resolve(stdout.trim());
+      }
     });
     proc.on("error", (err) => {
       clearTimeout(timer);

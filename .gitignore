@@ -3,3 +3,4 @@ data/
 output/
 dist/
 *.db
+bun.lock

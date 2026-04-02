@@ -145,14 +145,13 @@ export function startServer(port: number = 3000): import("http").Server {
           const newArticles = await fetchAllFeeds({ onProgress: send });
           send(`Fetched ${newArticles} new article(s).`);
 
-          // 2. Curate (only uncurated = newly fetched articles)
-          let curated = 0;
-          if (newArticles > 0) {
-            send("AI curating new articles...");
-            curated = await aiCurate(send);
+          // 2. Curate uncurated articles
+          send("AI curating articles...");
+          const curated = await aiCurate(send);
+          if (curated > 0) {
             send(`Curated ${curated} article(s).`);
           } else {
-            send("No new articles to curate.");
+            send("No articles to curate.");
           }
 
           // 3. Briefing

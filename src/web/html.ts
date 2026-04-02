@@ -288,8 +288,8 @@ export function renderPage(
       <div class="sidebar-section">
         <div class="sidebar-heading">Category</div>
         <div class="filter-list" id="category-filters">
-          <button class="filter-btn active" data-value="all" onclick="filterByCategory('all')">All</button>
-          ${allCategories.map(c => `<button class="filter-btn" data-value="${escapeHtml(c)}" onclick="filterByCategory('${escapeHtml(c)}')">${escapeHtml(c)}</button>`).join("\n")}
+          <button class="filter-btn active" data-value="all">All</button>
+          ${allCategories.map(c => `<button class="filter-btn" data-value="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join("\n")}
         </div>
       </div>` : ""}
 
@@ -314,8 +314,8 @@ export function renderPage(
       <div class="sidebar-section">
         <div class="sidebar-heading">Tags</div>
         <div class="tag-filters">
-          <button class="tag-filter active" data-value="all" onclick="filterByTag('all')">All</button>
-          ${allTags.map(t => `<button class="tag-filter" data-value="${escapeHtml(t)}" onclick="filterByTag('${escapeHtml(t)}')">${escapeHtml(t)}</button>`).join("\n")}
+          <button class="tag-filter active" data-value="all">All</button>
+          ${allTags.map(t => `<button class="tag-filter" data-value="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("\n")}
         </div>
       </div>` : ""}
 

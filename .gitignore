@@ -4,3 +4,6 @@ output/
 dist/
 *.db
 bun.lock
+.env
+.env.*
+tasks/*.png

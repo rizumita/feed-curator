@@ -464,6 +464,19 @@ function escapeAttr(s) {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// Bind category/tag filter buttons via event delegation (avoid inline onclick XSS)
+var catContainer = document.getElementById('category-filters');
+if (catContainer) catContainer.addEventListener('click', function(e) {
+  var btn = e.target.closest('.filter-btn');
+  if (btn) filterByCategory(btn.dataset.value || 'all');
+});
+document.querySelectorAll('.tag-filters').forEach(function(container) {
+  container.addEventListener('click', function(e) {
+    var btn = e.target.closest('.tag-filter');
+    if (btn) filterByTag(btn.dataset.value || 'all');
+  });
+});
+
 // Restore filters on load
 setActiveBtn('#read-filters', currentReadFilter);
 setActiveBtn('#category-filters', currentCategoryFilter);

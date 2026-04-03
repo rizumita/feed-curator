@@ -1,5 +1,6 @@
 import { createServer } from "http";
 import { readFileSync } from "fs";
+import { spawn as spawnProcess } from "child_process";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { renderPage } from "./web/html";
@@ -263,9 +264,8 @@ export function startServer(port: number = 3000): import("http").Server {
           jsonResponse(res, { error: "valid url required" }, 400);
           return;
         }
-        const { exec } = await import("child_process");
-        const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
-        exec(`${cmd} "${targetUrl.replace(/"/g, '\\"')}"`);
+        const cmd = process.platform === "darwin" ? "/usr/bin/open" : process.platform === "win32" ? "start" : "xdg-open";
+        spawnProcess(cmd, [targetUrl], { detached: true, stdio: "ignore" }).unref();
         jsonResponse(res, { ok: true });
         return;
       }

@@ -254,6 +254,22 @@ export function startServer(port: number = 3000): import("http").Server {
         return;
       }
 
+      // POST /api/open-url — open URL in system browser (for Tauri desktop app)
+      if (url.pathname === "/api/open-url" && method === "POST") {
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
+        const { url: targetUrl } = body as { url: unknown };
+        if (typeof targetUrl !== "string" || !targetUrl.startsWith("http")) {
+          jsonResponse(res, { error: "valid url required" }, 400);
+          return;
+        }
+        const { exec } = await import("child_process");
+        const cmd = process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
+        exec(`${cmd} "${targetUrl.replace(/"/g, '\\"')}"`);
+        jsonResponse(res, { ok: true });
+        return;
+      }
+
       // POST /api/config/language — set language
       if (url.pathname === "/api/config/language" && method === "POST") {
         const body = await parseJsonBody(req, res);

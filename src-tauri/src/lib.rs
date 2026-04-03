@@ -184,24 +184,21 @@ pub fn run() {
             let app_handle = app.handle().clone();
 
             if claude_installed {
-                // Extend PATH so the sidecar can find claude CLI
+                // Set PATH in the current process so sidecar inherits it
                 let claude_dir = std::path::Path::new(&claude_path)
                     .parent()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
-                let current_path = std::env::var("PATH").unwrap_or_default();
-                let extended_path = if claude_dir.is_empty() {
-                    current_path
-                } else {
-                    format!("{}:{}", claude_dir, current_path)
-                };
+                if !claude_dir.is_empty() {
+                    let current_path = std::env::var("PATH").unwrap_or_default();
+                    std::env::set_var("PATH", format!("{}:{}", claude_dir, current_path));
+                }
 
                 let sidecar = app
                     .shell()
                     .sidecar("feed-curator")
                     .expect("failed to find feed-curator sidecar")
-                    .args(["serve", "--port", "3200"])
-                    .env("PATH", &extended_path);
+                    .args(["serve", "--port", "3200"]);
 
                 let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
                 app.manage(SidecarChild(std::sync::Mutex::new(Some(child))));

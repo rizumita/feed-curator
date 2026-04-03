@@ -511,3 +511,21 @@ document.querySelectorAll('.briefing-cluster').forEach(function(cluster) {
   });
   if (!hasUnprocessed && cards.length > 0) cluster.style.display = 'none';
 });
+
+// Open external links in system browser (Tauri desktop app support)
+document.addEventListener('click', function(e) {
+  var link = e.target.closest('a[href]');
+  if (!link) return;
+  var href = link.getAttribute('href');
+  if (!href || href.startsWith('/') || href.startsWith('http://localhost') || href.startsWith('#')) return;
+  if (!href.startsWith('http')) return;
+  e.preventDefault();
+  e.stopPropagation();
+  fetch('/api/open-url', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({url: href})
+  }).catch(function() {
+    window.open(href, '_blank');
+  });
+}, true);

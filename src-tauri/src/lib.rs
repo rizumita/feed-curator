@@ -211,30 +211,6 @@ pub fn run() {
                     // Wait for server to start, then navigate
                     std::thread::sleep(std::time::Duration::from_secs(2));
                     let _ = w.eval("window.location.replace('http://localhost:3200')");
-                    std::thread::sleep(std::time::Duration::from_secs(1));
-                    let _ = w.eval(r#"
-                        document.addEventListener('click', function(e) {
-                            var link = e.target.closest('a[href]');
-                            if (!link) return;
-                            var href = link.getAttribute('href');
-                            if (href && !href.startsWith('/') && !href.startsWith('http://localhost')) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (window.__TAURI__ && window.__TAURI__.opener) {
-                                    window.__TAURI__.opener.openUrl(href);
-                                } else {
-                                    // Fallback: use fetch to a local endpoint that opens the URL
-                                    fetch('/api/open-url', {
-                                        method: 'POST',
-                                        headers: {'Content-Type': 'application/json'},
-                                        body: JSON.stringify({url: href})
-                                    }).catch(function() {
-                                        window.open(href, '_blank');
-                                    });
-                                }
-                            }
-                        }, true);
-                    "#);
                 });
             } else {
                 // Claude not installed — show setup screen (frontend/index.html with state injection)

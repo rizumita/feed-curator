@@ -36,17 +36,30 @@ fn detect_claude() -> (String, String) {
     (String::new(), String::new())
 }
 
+fn is_japanese() -> bool {
+    for key in &["LANG", "LC_ALL", "LC_MESSAGES"] {
+        if let Ok(val) = std::env::var(key) {
+            if val.starts_with("ja") { return true; }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = Command::new("defaults").args(["read", "-g", "AppleLanguages"]).output() {
+            if let Ok(text) = String::from_utf8(output.stdout) {
+                if text.contains("ja") { return true; }
+            }
+        }
+    }
+    false
+}
+
 #[tauri::command]
 fn check_claude_status() -> serde_json::Value {
     let (path, version) = detect_claude();
-    let home = std::env::var("HOME").unwrap_or_default();
-    let searched = claude_paths();
     serde_json::json!({
         "installed": !version.is_empty(),
         "version": version,
         "path": path,
-        "home": home,
-        "searched": searched,
     })
 }
 
@@ -55,11 +68,8 @@ fn restart_app(app: tauri::AppHandle) {
     tauri::process::restart(&app.env());
 }
 
-/// Instead of opening a terminal, copy the command to clipboard
-/// and show instructions. More reliable across sandbox environments.
 #[tauri::command]
 fn copy_command_to_clipboard(app: tauri::AppHandle, command: String) -> Result<(), String> {
-    // Write to clipboard via pbcopy (macOS) or equivalent
     #[cfg(target_os = "macos")]
     {
         use std::io::Write;
@@ -72,204 +82,8 @@ fn copy_command_to_clipboard(app: tauri::AppHandle, command: String) -> Result<(
         }
         child.wait().map_err(|e| e.to_string())?;
     }
-    let _ = app; // suppress unused warning on other platforms
+    let _ = app;
     Ok(())
-}
-
-fn is_japanese() -> bool {
-    // Check environment variables first
-    for key in &["LANG", "LC_ALL", "LC_MESSAGES"] {
-        if let Ok(val) = std::env::var(key) {
-            if val.starts_with("ja") { return true; }
-        }
-    }
-    // macOS: check system language via defaults
-    #[cfg(target_os = "macos")]
-    {
-        if let Ok(output) = Command::new("defaults").args(["read", "-g", "AppleLanguages"]).output() {
-            if let Ok(text) = String::from_utf8(output.stdout) {
-                if text.contains("ja") { return true; }
-            }
-        }
-    }
-    false
-}
-
-fn setup_html(claude_version: &str) -> String {
-    let installed = !claude_version.is_empty();
-    let ja = is_japanese();
-    format!(r#"<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Feed Curator</title>
-<style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-         display: flex; align-items: center; justify-content: center;
-         height: 100vh; background: #faf9fb; color: #333; }}
-  .setup {{ text-align: center; max-width: 480px; padding: 40px; }}
-  .logo {{ font-size: 48px; margin-bottom: 16px; }}
-  h1 {{ font-size: 24px; margin-bottom: 8px; color: #1a1a2e; }}
-  p {{ color: #666; margin-bottom: 24px; line-height: 1.6; }}
-  .status {{ display: inline-flex; align-items: center; gap: 8px;
-             padding: 8px 16px; border-radius: 8px; margin-bottom: 24px;
-             font-size: 14px; }}
-  .status.ok {{ background: #d4edda; color: #155724; }}
-  .status.missing {{ background: #f8d7da; color: #721c24; }}
-  .btn {{ display: inline-block; padding: 12px 24px; border-radius: 8px;
-          border: none; font-size: 16px; cursor: pointer;
-          font-weight: 600; margin: 4px; }}
-  .btn-primary {{ background: #7c3aed; color: white; }}
-  .btn-primary:hover {{ background: #6d28d9; }}
-  .btn-secondary {{ background: #e5e7eb; color: #374151; }}
-  .btn-secondary:hover {{ background: #d1d5db; }}
-  .cmd {{ background: #1a1a2e; color: #a5b4fc; padding: 12px 16px;
-          border-radius: 8px; font-family: monospace; font-size: 13px;
-          margin: 16px 0; text-align: left; }}
-  .spinner {{ display: none; margin: 16px auto; }}
-  .steps {{ text-align: left; margin: 16px 0; }}
-  .steps li {{ margin: 8px 0; color: #555; }}
-  .steps li.done {{ color: #155724; }}
-</style>
-</head>
-<body>
-<div class="setup" id="setup">
-  <div class="logo">📰</div>
-  <h1>Feed Curator</h1>
-  {}
-</div>
-<script>
-  async function checkClaude() {{
-    // Try Tauri IPC first
-    if (window.__TAURI__ && window.__TAURI__.core) {{
-      try {{
-        const result = await window.__TAURI__.core.invoke('check_claude_status');
-        return result;
-      }} catch(e) {{ console.log('Tauri invoke failed:', e); }}
-    }}
-    // Fallback: check if claude exists by testing common paths via fetch to a temp endpoint
-    // or simply try to detect by re-running the app
-    return {{ installed: false, version: '', searched: 'tauri_ipc_unavailable' }};
-  }}
-
-  var _ja = {ja};
-  async function copyCmd(cmd, statusId) {{
-    var status = document.getElementById(statusId);
-    var okMsg = _ja ? 'コピーしました！ターミナルに貼り付けて実行してください。' : 'Copied! Paste in Terminal and run.';
-    var errMsg = _ja ? 'コピーに失敗しました。手動でコピーしてください。' : 'Copy failed. Please copy manually.';
-    try {{
-      await window.__TAURI__.core.invoke('copy_command_to_clipboard', {{ command: cmd }});
-      status.textContent = okMsg;
-      status.style.color = '#155724';
-    }} catch(e) {{
-      try {{
-        await navigator.clipboard.writeText(cmd);
-        status.textContent = okMsg;
-        status.style.color = '#155724';
-      }} catch(e2) {{
-        status.textContent = errMsg;
-        status.style.color = '#721c24';
-      }}
-    }}
-  }}
-
-  async function installClaude() {{
-    await copyCmd('curl -fsSL https://claude.ai/install.sh | bash', 'install-status');
-  }}
-
-  async function loginClaude() {{
-    await copyCmd('claude', 'login-status');
-  }}
-
-  async function retry() {{
-    var retryMsg = document.getElementById('retry-msg');
-    retryMsg.textContent = _ja ? 'チェック中...' : 'Checking...';
-    retryMsg.style.color = '#666';
-    try {{
-      const status = await window.__TAURI__.core.invoke('check_claude_status');
-      if (status.installed) {{
-        document.getElementById('setup').innerHTML = `
-          <div class="logo">📰</div>
-          <h1>Feed Curator</h1>
-          <div class="status ok">✓ Claude Code ${{status.version}}</div>
-          <p>${{_ja ? 'アプリを再起動してください。' : 'Please restart the app.'}}</p>
-        `;
-        // Request app restart
-        try {{ await window.__TAURI__.core.invoke('restart_app'); }} catch {{}}
-      }} else {{
-        retryMsg.textContent = _ja
-          ? 'Claude Codeがまだ検出されません。ターミナルでインストールを完了してからもう一度試してください。'
-          : 'Claude Code not detected yet. Complete installation in Terminal and try again.';
-        retryMsg.style.color = '#721c24';
-      }}
-    }} catch(e) {{
-      retryMsg.textContent = (_ja ? 'チェックに失敗しました: ' : 'Check failed: ') + e;
-      retryMsg.style.color = '#721c24';
-    }}
-  }}
-</script>
-</body>
-</html>"#,
-    if installed {
-        format!(r#"
-  <div class="status ok">✓ Claude Code {claude}</div>
-  <p>{starting}</p>
-"#, claude = claude_version,
-    starting = if ja { "サーバーを起動中..." } else { "Starting server..." })
-    } else if ja {
-        r#"
-  <div class="status missing">✗ Claude Codeがインストールされていません</div>
-  <p>Feed CuratorはClaude Codeを使って記事をキュレーションします。<br>
-     インストールしてログインしてください。</p>
-
-  <ol class="steps">
-    <li><strong>ステップ 1:</strong> Claude Codeをインストール
-      <div class="cmd">curl -fsSL https://claude.ai/install.sh | bash</div>
-      <button class="btn btn-primary" onclick="installClaude()">コマンドをコピー</button>
-      <span id="install-status"></span>
-      <p style="font-size:13px;color:#666;margin-top:4px">ターミナルを開き、貼り付けて実行してください。</p>
-    </li>
-    <li><strong>ステップ 2:</strong> Claude Codeにログイン
-      <div class="cmd">claude</div>
-      <button class="btn btn-secondary" onclick="loginClaude()">コマンドをコピー</button>
-      <span id="login-status"></span>
-      <p style="font-size:13px;color:#666;margin-top:4px">ターミナルで実行し、ブラウザでログインしてください。</p>
-    </li>
-    <li><strong>ステップ 3:</strong> ここに戻る
-      <br><br>
-      <button class="btn btn-primary" onclick="retry()">再チェック</button>
-      <span id="retry-msg" style="display:block;margin-top:8px;color:#721c24;font-size:13px"></span>
-    </li>
-  </ol>
-"#.to_string()
-    } else {
-        r#"
-  <div class="status missing">✗ Claude Code is not installed</div>
-  <p>Feed Curator requires Claude Code to curate articles.<br>
-     Install it and log in to get started.</p>
-
-  <ol class="steps">
-    <li><strong>Step 1:</strong> Install Claude Code
-      <div class="cmd">curl -fsSL https://claude.ai/install.sh | bash</div>
-      <button class="btn btn-primary" onclick="installClaude()">Copy Command</button>
-      <span id="install-status"></span>
-      <p style="font-size:13px;color:#666;margin-top:4px">Open Terminal, paste, and run.</p>
-    </li>
-    <li><strong>Step 2:</strong> Log in to Claude Code
-      <div class="cmd">claude</div>
-      <button class="btn btn-secondary" onclick="loginClaude()">Copy Command</button>
-      <span id="login-status"></span>
-      <p style="font-size:13px;color:#666;margin-top:4px">Open Terminal, paste, and follow the login prompts.</p>
-    </li>
-    <li><strong>Step 3:</strong> Come back here
-      <br><br>
-      <button class="btn btn-primary" onclick="retry()">Check Again</button>
-      <span id="retry-msg" style="display:block;margin-top:8px;color:#721c24;font-size:13px"></span>
-    </li>
-  </ol>
-"#.to_string()
-    })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -294,8 +108,17 @@ pub fn run() {
                 detect_claude()
             };
             let claude_installed = !claude_version.is_empty();
+            let ja = is_japanese();
 
             let window = app.get_webview_window("main").unwrap();
+
+            // Inject state into the frontend page (loaded from frontend/index.html by Tauri)
+            let state_js = format!(
+                "window._feedCuratorState = {{ installed: {}, version: '{}', ja: {} }};",
+                claude_installed, claude_version.replace('\'', "\\'"), ja
+            );
+            let w = window.clone();
+            let app_handle = app.handle().clone();
 
             if claude_installed {
                 // Extend PATH so the sidecar can find claude CLI
@@ -310,7 +133,6 @@ pub fn run() {
                     format!("{}:{}", claude_dir, current_path)
                 };
 
-                // Claude is available — launch sidecar normally
                 let sidecar = app
                     .shell()
                     .sidecar("feed-curator")
@@ -321,8 +143,12 @@ pub fn run() {
                 let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
                 app.manage(SidecarChild(std::sync::Mutex::new(Some(child))));
 
-                let w = window.clone();
                 std::thread::spawn(move || {
+                    // Inject state first
+                    let _ = w.eval(&state_js);
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    let _ = w.eval("if (typeof initPage === 'function') initPage();");
+                    // Wait for server to start, then navigate
                     std::thread::sleep(std::time::Duration::from_secs(2));
                     let _ = w.eval("window.location.replace('http://localhost:3200')");
                     std::thread::sleep(std::time::Duration::from_secs(1));
@@ -342,14 +168,13 @@ pub fn run() {
                     "#);
                 });
             } else {
-                // Claude not installed — show setup screen
+                // Claude not installed — show setup screen (frontend/index.html with state injection)
                 app.manage(SidecarChild(std::sync::Mutex::new(None)));
-                let html = setup_html(&claude_version);
-                let w = window.clone();
                 std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    let escaped = html.replace('\\', "\\\\").replace('`', "\\`").replace("${", "\\${");
-                    let _ = w.eval(&format!("document.open(); document.write(`{}`); document.close();", escaped));
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    let _ = w.eval(&state_js);
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    let _ = w.eval("if (typeof initPage === 'function') initPage();");
                 });
             }
 

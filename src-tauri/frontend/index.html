@@ -1,7 +1,159 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>Feed Curator</title></head>
-<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;color:#666">
-  <p>Starting Feed Curator server...</p>
+<head>
+<meta charset="UTF-8">
+<title>Feed Curator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         display: flex; align-items: center; justify-content: center;
+         height: 100vh; background: #faf9fb; color: #333; }
+  .setup { text-align: center; max-width: 480px; padding: 40px; }
+  .logo { font-size: 48px; margin-bottom: 16px; }
+  h1 { font-size: 24px; margin-bottom: 8px; color: #1a1a2e; }
+  p { color: #666; margin-bottom: 24px; line-height: 1.6; }
+  .status { display: inline-flex; align-items: center; gap: 8px;
+             padding: 8px 16px; border-radius: 8px; margin-bottom: 24px;
+             font-size: 14px; }
+  .status.ok { background: #d4edda; color: #155724; }
+  .status.missing { background: #f8d7da; color: #721c24; }
+  .btn { display: inline-block; padding: 12px 24px; border-radius: 8px;
+          border: none; font-size: 16px; cursor: pointer;
+          font-weight: 600; margin: 4px; }
+  .btn-primary { background: #7c3aed; color: white; }
+  .btn-primary:hover { background: #6d28d9; }
+  .btn-secondary { background: #e5e7eb; color: #374151; }
+  .btn-secondary:hover { background: #d1d5db; }
+  .cmd { background: #1a1a2e; color: #a5b4fc; padding: 12px 16px;
+          border-radius: 8px; font-family: monospace; font-size: 13px;
+          margin: 16px 0; text-align: left; user-select: all; }
+  .steps { text-align: left; margin: 16px 0; }
+  .steps li { margin: 8px 0; color: #555; }
+  #loading { display: block; }
+  #setup-screen { display: none; }
+  #starting-screen { display: none; }
+</style>
+</head>
+<body>
+
+<div class="setup" id="loading">
+  <div class="logo">📰</div>
+  <h1>Feed Curator</h1>
+  <p>Loading...</p>
+</div>
+
+<div class="setup" id="setup-screen">
+  <div class="logo">📰</div>
+  <h1>Feed Curator</h1>
+  <div class="status missing" id="status-badge"></div>
+  <p id="setup-desc"></p>
+  <ol class="steps">
+    <li><strong id="step1-label"></strong>
+      <div class="cmd">curl -fsSL https://claude.ai/install.sh | bash</div>
+      <button class="btn btn-primary" onclick="copyInstall()" id="btn-install"></button>
+      <span id="install-status"></span>
+      <p style="font-size:13px;color:#666;margin-top:4px" id="step1-hint"></p>
+    </li>
+    <li><strong id="step2-label"></strong>
+      <div class="cmd">claude</div>
+      <button class="btn btn-secondary" onclick="copyLogin()" id="btn-login"></button>
+      <span id="login-status"></span>
+      <p style="font-size:13px;color:#666;margin-top:4px" id="step2-hint"></p>
+    </li>
+    <li><strong id="step3-label"></strong>
+      <br><br>
+      <button class="btn btn-primary" onclick="retry()" id="btn-retry"></button>
+      <span id="retry-msg" style="display:block;margin-top:8px;font-size:13px"></span>
+    </li>
+  </ol>
+</div>
+
+<div class="setup" id="starting-screen">
+  <div class="logo">📰</div>
+  <h1>Feed Curator</h1>
+  <div class="status ok" id="version-badge"></div>
+  <p id="starting-msg"></p>
+</div>
+
+<script>
+  // These will be set by Rust via window.eval() before page logic runs
+  window._feedCuratorState = window._feedCuratorState || { installed: false, version: '', ja: false };
+
+  function initPage() {
+    var state = window._feedCuratorState;
+    var ja = state.ja;
+
+    if (state.installed) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('starting-screen').style.display = 'block';
+      document.getElementById('version-badge').textContent = '✓ Claude Code ' + state.version;
+      document.getElementById('starting-msg').textContent = ja ? 'サーバーを起動中...' : 'Starting server...';
+    } else {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('setup-screen').style.display = 'block';
+      document.getElementById('status-badge').textContent = ja ? '✗ Claude Codeがインストールされていません' : '✗ Claude Code is not installed';
+      document.getElementById('setup-desc').innerHTML = ja
+        ? 'Feed CuratorはClaude Codeを使って記事をキュレーションします。<br>インストールしてログインしてください。'
+        : 'Feed Curator requires Claude Code to curate articles.<br>Install it and log in to get started.';
+      document.getElementById('step1-label').textContent = ja ? 'ステップ 1: Claude Codeをインストール' : 'Step 1: Install Claude Code';
+      document.getElementById('btn-install').textContent = ja ? 'コマンドをコピー' : 'Copy Command';
+      document.getElementById('step1-hint').textContent = ja ? 'ターミナルを開き、貼り付けて実行してください。' : 'Open Terminal, paste, and run.';
+      document.getElementById('step2-label').textContent = ja ? 'ステップ 2: Claude Codeにログイン' : 'Step 2: Log in to Claude Code';
+      document.getElementById('btn-login').textContent = ja ? 'コマンドをコピー' : 'Copy Command';
+      document.getElementById('step2-hint').textContent = ja ? 'ターミナルで実行し、ブラウザでログインしてください。' : 'Open Terminal, paste, and follow the login prompts.';
+      document.getElementById('step3-label').textContent = ja ? 'ステップ 3: ここに戻る' : 'Step 3: Come back here';
+      document.getElementById('btn-retry').textContent = ja ? '再チェック' : 'Check Again';
+    }
+  }
+
+  async function copyToClipboard(text, statusId) {
+    var status = document.getElementById(statusId);
+    var ja = window._feedCuratorState.ja;
+    var okMsg = ja ? 'コピーしました！ターミナルに貼り付けて実行してください。' : 'Copied! Paste in Terminal and run.';
+    try {
+      if (window.__TAURI__ && window.__TAURI__.core) {
+        await window.__TAURI__.core.invoke('copy_command_to_clipboard', { command: text });
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+      status.textContent = okMsg;
+      status.style.color = '#155724';
+    } catch(e) {
+      status.textContent = (ja ? 'コピーに失敗: ' : 'Copy failed: ') + e;
+      status.style.color = '#721c24';
+    }
+  }
+
+  function copyInstall() { copyToClipboard('curl -fsSL https://claude.ai/install.sh | bash', 'install-status'); }
+  function copyLogin() { copyToClipboard('claude', 'login-status'); }
+
+  async function retry() {
+    var retryMsg = document.getElementById('retry-msg');
+    var ja = window._feedCuratorState.ja;
+    retryMsg.textContent = ja ? 'チェック中...' : 'Checking...';
+    retryMsg.style.color = '#666';
+    try {
+      var status = await window.__TAURI__.core.invoke('check_claude_status');
+      if (status.installed) {
+        document.getElementById('setup-screen').style.display = 'none';
+        document.getElementById('starting-screen').style.display = 'block';
+        document.getElementById('version-badge').textContent = '✓ Claude Code ' + status.version;
+        document.getElementById('starting-msg').textContent = ja ? 'アプリを再起動しています...' : 'Restarting app...';
+        await window.__TAURI__.core.invoke('restart_app');
+      } else {
+        retryMsg.textContent = ja
+          ? 'Claude Codeがまだ検出されません。ターミナルでインストールを完了してからもう一度試してください。'
+          : 'Claude Code not detected yet. Complete installation in Terminal and try again.';
+        retryMsg.style.color = '#721c24';
+      }
+    } catch(e) {
+      retryMsg.textContent = (ja ? 'チェックに失敗しました: ' : 'Check failed: ') + e;
+      retryMsg.style.color = '#721c24';
+    }
+  }
+
+  // Wait for state injection then init
+  setTimeout(initPage, 300);
+</script>
 </body>
 </html>

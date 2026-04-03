@@ -66,6 +66,15 @@ function prepareArticleSnippet(a: import("./types").Article) {
   };
 }
 
+/** Minimal preview for Stage 1 fast screening: title + first 200 chars */
+function prepareArticlePreview(a: import("./types").Article) {
+  return {
+    id: a.id,
+    title: a.title,
+    content_preview: (a.content ?? "").slice(0, 200),
+  };
+}
+
 /** Rank articles by blended score: 70% curation score + 30% freshness (14-day window) */
 function rankByBlendedScore(articles: import("./types").Article[]): import("./types").Article[] {
   const now = Date.now();
@@ -82,19 +91,70 @@ function rankByBlendedScore(articles: import("./types").Article[]): import("./ty
     .map(r => r.article);
 }
 
-export async function aiCurate(onProgress?: (msg: string) => void): Promise<number> {
-  const articles = listArticles(true, CURATE_LIMIT);
-  if (articles.length === 0) {
-    console.log("No uncurated articles.");
-    return 0;
+/** Stage 1: Fast screening with minimal context. Returns preliminary scores only. */
+export async function aiCurateFast(
+  articles: import("./types").Article[],
+  onProgress?: (msg: string) => void,
+): Promise<Array<{ id: number; prelimScore: number }>> {
+  if (articles.length === 0) return [];
+
+  const batchSize = 20;
+  const results: Array<{ id: number; prelimScore: number }> = [];
+  const totalBatches = Math.ceil(articles.length / batchSize);
+
+  for (let i = 0; i < articles.length; i += batchSize) {
+    const batch = articles.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
+    const articlesJson = batch.map(prepareArticlePreview);
+
+    const prompt = `You are a feed article screener. Score these articles based on: novelty, technical depth, practical utility, breadth of interest.
+
+Articles (title + first 200 chars of content):
+${JSON.stringify(articlesJson, null, 2)}
+
+Respond with ONLY a JSON array (no markdown, no explanation):
+[{"id": <number>, "score": <0.0-1.0>}]
+
+Score criteria: 0.0 = spam/irrelevant, 0.3 = low value, 0.5 = borderline interesting, 0.7 = good article, 0.9+ = exceptional/must-read.`;
+
+    const msg = `Stage 1: Screening batch ${batchNum}/${totalBatches} (${batch.length} articles)...`;
+    onProgress?.(msg);
+
+    const response = await callClaude(prompt);
+    if (!response) {
+      onProgress?.(`Stage 1: Batch ${batchNum} failed, skipping.`);
+      continue;
+    }
+
+    try {
+      const json = extractJson(response, "array");
+      if (!json) continue;
+      const parsed = JSON.parse(json) as Array<{ id: number; score: number }>;
+      for (const r of parsed) {
+        if (r.id && typeof r.score === "number") {
+          results.push({ id: r.id, prelimScore: r.score });
+        }
+      }
+    } catch {
+      onProgress?.(`Stage 1: Batch ${batchNum} parse error, skipping.`);
+    }
   }
+
+  return results;
+}
+
+/** Stage 2: Precision re-evaluation with full context and user profile. */
+export async function aiRerankCandidates(
+  articles: import("./types").Article[],
+  onProgress?: (msg: string) => void,
+): Promise<Array<{ id: number; score: number; summary: string; tags: string }>> {
+  if (articles.length === 0) return [];
 
   const language = getConfig("language") ?? "en";
   const profile = generateProfile();
   const profilePrompt = profileForPrompt(profile);
-
   const batchSize = 10;
-  let curated = 0;
+  const results: Array<{ id: number; score: number; summary: string; tags: string }> = [];
   const totalBatches = Math.ceil(articles.length / batchSize);
 
   for (let i = 0; i < articles.length; i += batchSize) {
@@ -120,41 +180,140 @@ Then add 1-2 free-form tags that capture the specific topic (e.g. "fine-tuning",
 Score based on: novelty, technical depth, practical utility, breadth of interest.
 Adjust scores using the user profile above.`;
 
-    const msg = `Curating batch ${batchNum}/${totalBatches} (${batch.length} articles)...`;
-    console.log(msg);
+    const msg = `Stage 2: Re-evaluating batch ${batchNum}/${totalBatches} (${batch.length} articles)...`;
     onProgress?.(msg);
 
     const response = await callClaude(prompt);
     if (!response) {
-      console.error("Failed to get AI response for batch, skipping.");
-      onProgress?.(`Batch ${batchNum} failed, skipping.`);
+      onProgress?.(`Stage 2: Batch ${batchNum} failed, skipping.`);
       continue;
     }
 
     try {
-      // Extract JSON from response (handle markdown code blocks)
       const json = extractJson(response, "array");
-      if (!json) {
-        console.error("No JSON array found in response, skipping batch.");
-        continue;
-      }
-      const results = JSON.parse(json) as Array<{
-        id: number;
-        score: number;
-        summary: string;
-        tags: string;
-      }>;
-
-      for (const r of results) {
+      if (!json) continue;
+      const parsed = JSON.parse(json) as Array<{ id: number; score: number; summary: string; tags: string }>;
+      for (const r of parsed) {
         if (r.id && typeof r.score === "number" && r.summary) {
-          const tags = r.tags ? normalizeTags(r.tags) : r.tags;
-          updateArticleCuration(r.id, r.score, r.summary, tags);
-          curated++;
+          results.push(r);
         }
       }
-      onProgress?.(`Batch ${batchNum} done: ${results.length} curated`);
-    } catch (e) {
-      console.error("Failed to parse AI response:", e);
+    } catch {
+      onProgress?.(`Stage 2: Batch ${batchNum} parse error, skipping.`);
+    }
+  }
+
+  return results;
+}
+
+/** Generate summary/tags for confirmed low-scoring articles (score kept from Stage 1). */
+async function aiSummarizeLow(
+  articles: Array<{ article: import("./types").Article; prelimScore: number }>,
+  onProgress?: (msg: string) => void,
+): Promise<Array<{ id: number; score: number; summary: string; tags: string }>> {
+  if (articles.length === 0) return [];
+
+  const language = getConfig("language") ?? "en";
+  const batchSize = 20;
+  const results: Array<{ id: number; score: number; summary: string; tags: string }> = [];
+  const totalBatches = Math.ceil(articles.length / batchSize);
+  const scoreMap = new Map(articles.map(a => [a.article.id, a.prelimScore]));
+
+  for (let i = 0; i < articles.length; i += batchSize) {
+    const batch = articles.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
+    const articlesJson = batch.map(a => prepareArticleSnippet(a.article));
+
+    const prompt = `You are a feed curator. Generate brief summaries and tags for these low-priority articles.
+
+Language for summaries: ${language}
+
+Articles (content_head: first 500 chars, content_tail: last 300 chars if long, content_length: total chars):
+${JSON.stringify(articlesJson, null, 2)}
+
+Respond with ONLY a JSON array (no markdown, no explanation):
+[{"id": <number>, "summary": "<1-2 sentences in ${language}>", "tags": "<comma-separated English tags>"}]
+
+Pick 1 core tag from: agents, coding, llm, mcp, security, tools, rag, local-models, enterprise, research
+Then add 1-2 free-form tags that capture the specific topic. Keep tags lowercase, hyphenated.`;
+
+    const msg = `Summarizing ${batch.length} low-priority articles (batch ${batchNum}/${totalBatches})...`;
+    onProgress?.(msg);
+
+    const response = await callClaude(prompt);
+    if (!response) {
+      onProgress?.(`Low-priority batch ${batchNum} failed, skipping.`);
+      continue;
+    }
+
+    try {
+      const json = extractJson(response, "array");
+      if (!json) continue;
+      const parsed = JSON.parse(json) as Array<{ id: number; summary: string; tags: string }>;
+      for (const r of parsed) {
+        if (r.id && r.summary) {
+          results.push({
+            id: r.id,
+            score: scoreMap.get(r.id) ?? 0,
+            summary: r.summary,
+            tags: r.tags ?? "",
+          });
+        }
+      }
+    } catch {
+      onProgress?.(`Low-priority batch ${batchNum} parse error, skipping.`);
+    }
+  }
+
+  return results;
+}
+
+export async function aiCurate(onProgress?: (msg: string) => void): Promise<number> {
+  const articles = listArticles(true, CURATE_LIMIT);
+  if (articles.length === 0) {
+    console.log("No uncurated articles.");
+    return 0;
+  }
+
+  const lowThreshold = parseFloat(getConfig("curate_low_threshold") ?? "0.3");
+
+  // Stage 1: Fast screening
+  onProgress?.(`Stage 1: Screening ${articles.length} articles...`);
+  const preliminary = await aiCurateFast(articles, onProgress);
+
+  // Triage: split into low-scoring and candidates
+  const scoredIds = new Set(preliminary.map(p => p.id));
+  const prelimMap = new Map(preliminary.map(p => [p.id, p.prelimScore]));
+  const candidates: import("./types").Article[] = [];
+  const lowArticles: Array<{ article: import("./types").Article; prelimScore: number }> = [];
+
+  for (const article of articles) {
+    const prelimScore = prelimMap.get(article.id);
+    if (prelimScore === undefined) {
+      // Not returned by Stage 1 — treat as candidate to avoid dropping
+      candidates.push(article);
+    } else if (prelimScore < lowThreshold) {
+      lowArticles.push({ article, prelimScore });
+    } else {
+      candidates.push(article);
+    }
+  }
+
+  onProgress?.(`Triage: ${candidates.length} candidates, ${lowArticles.length} low-priority`);
+
+  // Stage 2: Precision re-evaluation for candidates
+  const reranked = await aiRerankCandidates(candidates, onProgress);
+
+  // Summarize low-scoring articles (score preserved from Stage 1)
+  const lowResults = await aiSummarizeLow(lowArticles, onProgress);
+
+  // Save all results
+  let curated = 0;
+  for (const r of [...reranked, ...lowResults]) {
+    if (r.id && typeof r.score === "number" && r.summary) {
+      const tags = r.tags ? normalizeTags(r.tags) : r.tags;
+      updateArticleCuration(r.id, r.score, r.summary, tags);
+      curated++;
     }
   }
 

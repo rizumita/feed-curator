@@ -12,9 +12,30 @@ function extractJson(response: string, type: "array" | "object"): string | null 
   return match?.[0] ?? null;
 }
 
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+function findClaude(): string {
+  const home = homedir();
+  const candidates = [
+    "claude",
+    join(home, ".local", "bin", "claude"),
+    join(home, ".claude", "bin", "claude"),
+    "/usr/local/bin/claude",
+    "/opt/homebrew/bin/claude",
+  ];
+  for (const p of candidates) {
+    if (p === "claude" || existsSync(p)) return p;
+  }
+  return "claude";
+}
+
+const CLAUDE_PATH = findClaude();
+
 function callClaude(prompt: string): Promise<string | null> {
   return new Promise((resolve) => {
-    const proc = spawn("claude", ["-p", "--output-format", "json", prompt]);
+    const proc = spawn(CLAUDE_PATH, ["-p", "--output-format", "json", prompt]);
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });

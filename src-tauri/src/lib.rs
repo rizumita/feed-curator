@@ -26,32 +26,25 @@ fn check_claude_status() -> serde_json::Value {
     })
 }
 
+/// Instead of opening a terminal, copy the command to clipboard
+/// and show instructions. More reliable across sandbox environments.
 #[tauri::command]
-fn open_terminal_with_command(command: String) {
+fn copy_command_to_clipboard(app: tauri::AppHandle, command: String) -> Result<(), String> {
+    // Write to clipboard via pbcopy (macOS) or equivalent
     #[cfg(target_os = "macos")]
     {
-        let script = format!(
-            r#"tell application "Terminal"
-                activate
-                do script "{}"
-            end tell"#,
-            command.replace('"', r#"\""#)
-        );
-        let _ = Command::new("osascript").arg("-e").arg(&script).spawn();
-    }
-    #[cfg(target_os = "linux")]
-    {
-        // Try common terminal emulators
-        for term in &["gnome-terminal", "konsole", "xterm"] {
-            if Command::new(term).arg("-e").arg(&command).spawn().is_ok() {
-                break;
-            }
+        use std::io::Write;
+        let mut child = Command::new("/usr/bin/pbcopy")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("pbcopy failed: {}", e))?;
+        if let Some(ref mut stdin) = child.stdin {
+            stdin.write_all(command.as_bytes()).map_err(|e| e.to_string())?;
         }
+        child.wait().map_err(|e| e.to_string())?;
     }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = Command::new("cmd").args(["/c", "start", "cmd", "/k", &command]).spawn();
-    }
+    let _ = app; // suppress unused warning on other platforms
+    Ok(())
 }
 
 fn setup_html(claude_version: &str) -> String {
@@ -105,20 +98,31 @@ fn setup_html(claude_version: &str) -> String {
     }} catch {{ return {{ installed: false, version: '' }}; }}
   }}
 
-  async function runInTerminal(cmd) {{
+  async function copyCmd(cmd, statusId) {{
+    var status = document.getElementById(statusId);
     try {{
-      await window.__TAURI__.core.invoke('open_terminal_with_command', {{ command: cmd }});
-    }} catch(e) {{ console.error(e); }}
+      await window.__TAURI__.core.invoke('copy_command_to_clipboard', {{ command: cmd }});
+      status.textContent = 'Copied! Paste in Terminal and run.';
+      status.style.color = '#155724';
+    }} catch(e) {{
+      // Fallback: browser clipboard API
+      try {{
+        await navigator.clipboard.writeText(cmd);
+        status.textContent = 'Copied! Paste in Terminal and run.';
+        status.style.color = '#155724';
+      }} catch(e2) {{
+        status.textContent = 'Copy failed. Please copy manually.';
+        status.style.color = '#721c24';
+      }}
+    }}
   }}
 
   async function installClaude() {{
-    document.getElementById('install-status').textContent = 'Opening Terminal...';
-    await runInTerminal('curl -fsSL https://claude.ai/install.sh | bash');
+    await copyCmd('curl -fsSL https://claude.ai/install.sh | bash', 'install-status');
   }}
 
   async function loginClaude() {{
-    document.getElementById('login-status').textContent = 'Opening Terminal...';
-    await runInTerminal('claude');
+    await copyCmd('claude', 'login-status');
   }}
 
   async function retry() {{
@@ -153,13 +157,15 @@ fn setup_html(claude_version: &str) -> String {
   <ol class="steps">
     <li><strong>Step 1:</strong> Install Claude Code
       <div class="cmd">curl -fsSL https://claude.ai/install.sh | bash</div>
-      <button class="btn btn-primary" onclick="installClaude()">Open Terminal &amp; Install</button>
+      <button class="btn btn-primary" onclick="installClaude()">Copy Command</button>
       <span id="install-status"></span>
+      <p style="font-size:13px;color:#666;margin-top:4px">Open Terminal, paste, and run.</p>
     </li>
     <li><strong>Step 2:</strong> Log in to Claude Code
       <div class="cmd">claude</div>
-      <button class="btn btn-secondary" onclick="loginClaude()">Open Terminal &amp; Login</button>
+      <button class="btn btn-secondary" onclick="loginClaude()">Copy Command</button>
       <span id="login-status"></span>
+      <p style="font-size:13px;color:#666;margin-top:4px">Open Terminal, paste, and follow the login prompts.</p>
     </li>
     <li><strong>Step 3:</strong> Come back here
       <br><br>
@@ -177,7 +183,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![check_claude_status, open_terminal_with_command])
+        .invoke_handler(tauri::generate_handler![check_claude_status, copy_command_to_clipboard])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

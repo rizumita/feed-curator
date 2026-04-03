@@ -33,9 +33,14 @@ function findClaude(): string {
 
 const CLAUDE_PATH = findClaude();
 
-function callClaude(prompt: string): Promise<string | null> {
+function callClaude(prompt: string, opts?: { allowedTools?: string[] }): Promise<string | null> {
+  const args = ["-p", "--output-format", "json"];
+  if (opts?.allowedTools?.length) {
+    args.push("--allowedTools", ...opts.allowedTools);
+  }
+  args.push(prompt);
   return new Promise((resolve) => {
-    const proc = spawn(CLAUDE_PATH, ["-p", "--output-format", "json", prompt]);
+    const proc = spawn(CLAUDE_PATH, args);
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
@@ -449,7 +454,7 @@ Guidelines:
 - Make sure URLs are actual feed URLs, not regular web pages
 - Include feeds in the topic's language when applicable`;
 
-  const response = await callClaude(prompt);
+  const response = await callClaude(prompt, { allowedTools: ["WebSearch", "WebFetch"] });
   if (!response) return [];
 
   try {

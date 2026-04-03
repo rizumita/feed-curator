@@ -34,13 +34,20 @@ function findClaude(): string {
 const CLAUDE_PATH = findClaude();
 
 function callClaude(prompt: string, opts?: { allowedTools?: string[] }): Promise<string | null> {
+  const useStdin = opts?.allowedTools?.length;
   const args = ["-p", "--output-format", "json"];
-  if (opts?.allowedTools?.length) {
+  if (useStdin) {
+    // variadic --allowedTools consumes remaining args, so pass prompt via stdin
     args.push("--allowedTools", ...opts.allowedTools);
+  } else {
+    args.push(prompt);
   }
-  args.push(prompt);
   return new Promise((resolve) => {
     const proc = spawn(CLAUDE_PATH, args);
+    if (useStdin) {
+      proc.stdin?.write(prompt);
+      proc.stdin?.end();
+    }
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });

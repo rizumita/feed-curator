@@ -430,9 +430,13 @@ export interface DiscoveredFeed {
 export async function aiDiscoverFeeds(topic: string, onProgress?: (msg: string) => void): Promise<DiscoveredFeed[]> {
   onProgress?.(`Searching feeds for "${topic}"...`);
 
+  const language = getConfig("language") ?? "en";
   const prompt = `You are an RSS feed discovery assistant. Find RSS/Atom feeds related to this topic: "${topic}"
 
 Search for blogs, news sites, and publications about this topic. For each feed found, verify it's a real RSS/Atom feed URL (ending in /feed, /rss, /atom.xml, /feed.xml, /rss.xml, /index.xml, or similar).
+
+User's language: ${language}
+If the topic is in a non-English language, include feeds in that language as well as relevant English feeds.
 
 Return ONLY a JSON array (no markdown, no explanation):
 [{"url": "https://example.com/feed.xml", "title": "Site Name", "description": "Brief description of what this feed covers"}]
@@ -442,7 +446,8 @@ Guidelines:
 - Prefer actively maintained feeds
 - Include a mix of individual blogs and official project blogs
 - Only include publicly accessible feeds (no auth required)
-- Make sure URLs are actual feed URLs, not regular web pages`;
+- Make sure URLs are actual feed URLs, not regular web pages
+- Include feeds in the topic's language when applicable`;
 
   const response = await callClaude(prompt);
   if (!response) return [];

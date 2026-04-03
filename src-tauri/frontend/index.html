@@ -32,6 +32,10 @@
   #loading { display: block; }
   #setup-screen { display: none; }
   #starting-screen { display: none; }
+  .log-area { background: #1a1a2e; color: #a5b4fc; font-family: monospace;
+              font-size: 12px; padding: 12px; border-radius: 8px;
+              max-height: 150px; overflow-y: auto; text-align: left;
+              margin: 8px 0; display: none; white-space: pre-wrap; }
 </style>
 </head>
 <body>
@@ -53,6 +57,7 @@
       <button class="btn btn-primary" onclick="directInstall()" id="btn-direct-install"></button>
       <button class="btn btn-secondary" onclick="copyInstall()" id="btn-install"></button>
       <span id="install-status"></span>
+      <div class="log-area" id="install-log"></div>
       <p style="font-size:13px;color:#666;margin-top:4px" id="step1-hint"></p>
     </li>
     <li><strong id="step2-label"></strong>
@@ -153,13 +158,23 @@
 
   async function directInstall() {
     var status = document.getElementById('install-status');
+    var logArea = document.getElementById('install-log');
     var ja = window._feedCuratorState.ja;
     var btn = document.getElementById('btn-direct-install');
     btn.disabled = true;
     btn.textContent = ja ? 'インストール中...' : 'Installing...';
     status.textContent = '';
+    logArea.style.display = 'block';
+    logArea.textContent = '';
+
+    // Listen for progress events
+    var unlisten = await window.__TAURI__.event.listen('install-progress', function(event) {
+      logArea.textContent += event.payload + '\n';
+      logArea.scrollTop = logArea.scrollHeight;
+    });
+
     try {
-      var result = await window.__TAURI__.core.invoke('install_claude');
+      await window.__TAURI__.core.invoke('install_claude');
       status.textContent = ja ? 'インストール完了！ステップ2に進んでください。' : 'Installed! Proceed to Step 2.';
       status.style.color = '#155724';
       btn.textContent = ja ? '完了' : 'Done';
@@ -167,8 +182,9 @@
       status.textContent = (ja ? 'インストール失敗: ' : 'Install failed: ') + e;
       status.style.color = '#721c24';
       btn.disabled = false;
-      btn.textContent = ja ? '直接インストール' : 'Install Now';
+      btn.textContent = ja ? 'インストール' : 'Install Now';
     }
+    unlisten();
   }
 
   async function retry() {

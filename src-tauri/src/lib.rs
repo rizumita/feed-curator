@@ -1,4 +1,4 @@
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_window_state::AppHandleExt;
 use std::process::Command;
@@ -69,20 +69,39 @@ fn restart_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
-fn install_claude() -> Result<String, String> {
-    let output = Command::new("/bin/bash")
-        .args(["-c", "curl -fsSL https://claude.ai/install.sh | bash 2>&1"])
-        .output()
-        .map_err(|e| format!("Failed to run installer: {}", e))?;
+async fn install_claude(app: tauri::AppHandle) -> Result<String, String> {
+    use std::io::{BufRead, BufReader};
 
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut child = Command::new("/bin/bash")
+            .args(["-c", "curl -fsSL https://claude.ai/install.sh | bash 2>&1"])
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start installer: {}", e))?;
 
-    if output.status.success() {
-        Ok(format!("{}\n{}", stdout, stderr).trim().to_string())
-    } else {
-        Err(format!("Install failed:\n{}\n{}", stdout, stderr))
-    }
+        let stdout = child.stdout.take().unwrap();
+        let reader = BufReader::new(stdout);
+        let mut full_output = String::new();
+
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                full_output.push_str(&line);
+                full_output.push('\n');
+                let _ = app.emit("install-progress", &line);
+            }
+        }
+
+        let status = child.wait().map_err(|e| format!("Wait failed: {}", e))?;
+        if status.success() {
+            Ok(full_output.trim().to_string())
+        } else {
+            Err(format!("Install failed:\n{}", full_output))
+        }
+    })
+    .await
+    .map_err(|e| format!("Thread error: {}", e))?;
+
+    result
 }
 
 #[tauri::command]

@@ -1,5 +1,6 @@
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_window_state::AppHandleExt;
 
 struct SidecarChild(std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
 
@@ -33,7 +34,6 @@ pub fn run() {
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let _ = window.eval("window.location.replace('http://localhost:3200')");
-                // Inject external link handler after page loads
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 let _ = window.eval(r#"
                     document.addEventListener('click', function(e) {
@@ -56,14 +56,30 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                if let Some(state) = app.try_state::<SidecarChild>() {
-                    if let Ok(mut guard) = state.0.lock() {
-                        if let Some(child) = guard.take() {
-                            let _ = child.kill();
+            match event {
+                tauri::RunEvent::ExitRequested { .. } => {
+                    // Save window state before exit
+                    app.save_window_state(tauri_plugin_window_state::StateFlags::all()).ok();
+                    // Kill sidecar
+                    if let Some(state) = app.try_state::<SidecarChild>() {
+                        if let Ok(mut guard) = state.0.lock() {
+                            if let Some(child) = guard.take() {
+                                let _ = child.kill();
+                            }
                         }
                     }
                 }
+                tauri::RunEvent::Exit => {
+                    // Final cleanup
+                    if let Some(state) = app.try_state::<SidecarChild>() {
+                        if let Ok(mut guard) = state.0.lock() {
+                            if let Some(child) = guard.take() {
+                                let _ = child.kill();
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         });
 }

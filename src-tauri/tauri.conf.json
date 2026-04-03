@@ -10,6 +10,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Feed Curator",
         "width": 1280,
         "height": 800,

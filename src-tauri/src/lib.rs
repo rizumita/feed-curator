@@ -181,7 +181,7 @@ pub fn run() {
                 claude_installed, claude_version.replace('\'', "\\'"), ja
             );
             let w = window.clone();
-            let app_handle = app.handle().clone();
+            let _app_handle = app.handle().clone();
 
             if claude_installed {
                 // Set PATH in the current process so sidecar inherits it

@@ -27,6 +27,7 @@
     "dev": "tsx src/cli.ts",
     "test": "DB_PATH=./data/test.db vitest run --no-file-parallelism",
     "build:binary": "bun run scripts/build-binary.ts",
+    "build:app": "op run --env-file .env -- cargo tauri build",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

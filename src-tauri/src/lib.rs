@@ -39,11 +39,20 @@ fn detect_claude() -> (String, String) {
 #[tauri::command]
 fn check_claude_status() -> serde_json::Value {
     let (path, version) = detect_claude();
+    let home = std::env::var("HOME").unwrap_or_default();
+    let searched = claude_paths();
     serde_json::json!({
         "installed": !version.is_empty(),
         "version": version,
         "path": path,
+        "home": home,
+        "searched": searched,
     })
+}
+
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    tauri::process::restart(&app.env());
 }
 
 /// Instead of opening a terminal, copy the command to clipboard
@@ -132,10 +141,16 @@ fn setup_html(claude_version: &str) -> String {
 </div>
 <script>
   async function checkClaude() {{
-    try {{
-      const result = await window.__TAURI__.core.invoke('check_claude_status');
-      return result;
-    }} catch {{ return {{ installed: false, version: '' }}; }}
+    // Try Tauri IPC first
+    if (window.__TAURI__ && window.__TAURI__.core) {{
+      try {{
+        const result = await window.__TAURI__.core.invoke('check_claude_status');
+        return result;
+      }} catch(e) {{ console.log('Tauri invoke failed:', e); }}
+    }}
+    // Fallback: check if claude exists by testing common paths via fetch to a temp endpoint
+    // or simply try to detect by re-running the app
+    return {{ installed: false, version: '', searched: 'tauri_ipc_unavailable' }};
   }}
 
   var _ja = {ja};
@@ -168,20 +183,29 @@ fn setup_html(claude_version: &str) -> String {
   }}
 
   async function retry() {{
-    const status = await checkClaude();
-    if (status.installed) {{
-      document.getElementById('setup').innerHTML = `
-        <div class="logo">📰</div>
-        <h1>Feed Curator</h1>
-        <div class="status ok">✓ Claude Code ${{status.version}}</div>
-        <p>Starting server...</p>
-      `;
-      // Reload to trigger normal startup
-      setTimeout(() => window.location.reload(), 1000);
-    }} else {{
-      document.getElementById('retry-msg').textContent = _ja
-        ? 'Claude Codeがまだ検出されません。ターミナルでインストールを完了してから再試行してください。'
-        : 'Claude Code not detected yet. Complete installation in Terminal and try again.';
+    var retryMsg = document.getElementById('retry-msg');
+    retryMsg.textContent = _ja ? 'チェック中...' : 'Checking...';
+    retryMsg.style.color = '#666';
+    try {{
+      const status = await window.__TAURI__.core.invoke('check_claude_status');
+      if (status.installed) {{
+        document.getElementById('setup').innerHTML = `
+          <div class="logo">📰</div>
+          <h1>Feed Curator</h1>
+          <div class="status ok">✓ Claude Code ${{status.version}}</div>
+          <p>${{_ja ? 'アプリを再起動してください。' : 'Please restart the app.'}}</p>
+        `;
+        // Request app restart
+        try {{ await window.__TAURI__.core.invoke('restart_app'); }} catch {{}}
+      }} else {{
+        retryMsg.textContent = _ja
+          ? 'Claude Codeがまだ検出されません。ターミナルでインストールを完了してからもう一度試してください。'
+          : 'Claude Code not detected yet. Complete installation in Terminal and try again.';
+        retryMsg.style.color = '#721c24';
+      }}
+    }} catch(e) {{
+      retryMsg.textContent = (_ja ? 'チェックに失敗しました: ' : 'Check failed: ') + e;
+      retryMsg.style.color = '#721c24';
     }}
   }}
 </script>
@@ -254,7 +278,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![check_claude_status, copy_command_to_clipboard])
+        .invoke_handler(tauri::generate_handler![check_claude_status, copy_command_to_clipboard, restart_app])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

@@ -48,9 +48,19 @@ fn copy_command_to_clipboard(app: tauri::AppHandle, command: String) -> Result<(
 }
 
 fn is_japanese() -> bool {
+    // Check environment variables first
     for key in &["LANG", "LC_ALL", "LC_MESSAGES"] {
         if let Ok(val) = std::env::var(key) {
             if val.starts_with("ja") { return true; }
+        }
+    }
+    // macOS: check system language via defaults
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = Command::new("defaults").args(["read", "-g", "AppleLanguages"]).output() {
+            if let Ok(text) = String::from_utf8(output.stdout) {
+                if text.contains("ja") { return true; }
+            }
         }
     }
     false

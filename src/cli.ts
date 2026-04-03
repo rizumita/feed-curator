@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { Command } from "commander";
 import { addFeed, listFeeds, updateFeedCategory, fetchAllFeeds, loadStarterFeeds } from "./feed";
@@ -11,7 +11,8 @@ import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
 import { aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
 import { generateDigestMarkdown } from "./digest";
-import { runEvaluation } from "./eval";
+import { runEvaluation, compareReports } from "./eval";
+import type { EvalReport } from "./eval";
 
 const program = new Command();
 program.name("feed-curator").description("AI-powered RSS feed curation tool");
@@ -335,7 +336,8 @@ program
   .description("Evaluate curation quality using LLM-as-judge")
   .option("-n, --sample <n>", "Number of articles to sample", "30")
   .option("-o, --output <path>", "Save report to file")
-  .action(async (opts: { sample: string; output?: string }) => {
+  .option("-c, --compare <path>", "Compare with baseline report")
+  .action(async (opts: { sample: string; output?: string; compare?: string }) => {
     const sampleSize = Math.max(1, Math.min(100, parseInt(opts.sample, 10) || 30));
     const report = await runEvaluation(sampleSize, console.log);
 
@@ -353,11 +355,34 @@ program
       console.log(`Overall: ${report.judge_summary.avg_overall.toFixed(2)}/5`);
     }
 
-    if (opts.output) {
-      mkdirSync(dirname(opts.output), { recursive: true });
-      writeFileSync(opts.output, JSON.stringify(report, null, 2), "utf-8");
-      console.log(`\nReport saved to ${opts.output}`);
+    console.log(`\nElapsed: ${(report.elapsed_ms / 1000).toFixed(1)}s`);
+
+    if (opts.compare) {
+      try {
+        const baseline = JSON.parse(readFileSync(opts.compare, "utf-8")) as EvalReport;
+        const cmp = compareReports(baseline, report);
+        const sign = (n: number) => n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2);
+        const pctSign = (n: number) => n >= 0 ? `+${(n * 100).toFixed(1)}%` : `${(n * 100).toFixed(1)}%`;
+
+        console.log(`\n=== Comparison vs ${cmp.baseline_date} ===`);
+        for (const j of cmp.judge) {
+          console.log(`  ${j.metric}: ${j.baseline.toFixed(2)} → ${j.current.toFixed(2)} (${sign(j.delta)})`);
+        }
+        for (const b of cmp.behavioral) {
+          console.log(`  ${b.metric}: ${(b.baseline * 100).toFixed(1)}% → ${(b.current * 100).toFixed(1)}% (${pctSign(b.delta)})`);
+        }
+        if (cmp.timing.baseline_ms > 0) {
+          console.log(`  Time: ${(cmp.timing.baseline_ms / 1000).toFixed(1)}s → ${(cmp.timing.current_ms / 1000).toFixed(1)}s (${cmp.timing.delta_ms >= 0 ? "+" : ""}${(cmp.timing.delta_ms / 1000).toFixed(1)}s)`);
+        }
+      } catch (e) {
+        console.error(`Failed to load baseline: ${opts.compare}`);
+      }
     }
+
+    const outputPath = opts.output ?? `output/eval-${report.date}.json`;
+    mkdirSync(dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, JSON.stringify(report, null, 2), "utf-8");
+    console.log(`\nReport saved to ${outputPath}`);
   });
 
 // feed start (all-in-one: fetch → curate → briefing → serve)

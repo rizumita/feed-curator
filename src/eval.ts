@@ -49,6 +49,7 @@ export interface BehavioralMetrics {
 export interface EvalReport {
   date: string;
   sample_size: number;
+  elapsed_ms: number;
   behavioral: BehavioralMetrics;
   judge_results: JudgeResult[];
   judge_summary: {
@@ -56,6 +57,62 @@ export interface EvalReport {
     avg_summary_quality: number;
     avg_tag_relevance: number;
     avg_overall: number;
+  };
+}
+
+export interface ComparisonResult {
+  baseline_date: string;
+  current_date: string;
+  judge: {
+    metric: string;
+    baseline: number;
+    current: number;
+    delta: number;
+  }[];
+  behavioral: {
+    metric: string;
+    baseline: number;
+    current: number;
+    delta: number;
+  }[];
+  timing: {
+    baseline_ms: number;
+    current_ms: number;
+    delta_ms: number;
+  };
+}
+
+/** Compare two eval reports and return structured deltas */
+export function compareReports(baseline: EvalReport, current: EvalReport): ComparisonResult {
+  const judgeMetrics = [
+    { metric: "Score accuracy", key: "avg_score_accuracy" as const },
+    { metric: "Summary quality", key: "avg_summary_quality" as const },
+    { metric: "Tag relevance", key: "avg_tag_relevance" as const },
+    { metric: "Overall", key: "avg_overall" as const },
+  ];
+
+  return {
+    baseline_date: baseline.date,
+    current_date: current.date,
+    judge: judgeMetrics.map(m => ({
+      metric: m.metric,
+      baseline: baseline.judge_summary[m.key],
+      current: current.judge_summary[m.key],
+      delta: current.judge_summary[m.key] - baseline.judge_summary[m.key],
+    })),
+    behavioral: [
+      {
+        metric: "Read rate",
+        baseline: baseline.behavioral.read_rate,
+        current: current.behavioral.read_rate,
+        delta: current.behavioral.read_rate - baseline.behavioral.read_rate,
+      },
+    ],
+    timing: {
+      baseline_ms: baseline.elapsed_ms ?? 0,
+      current_ms: current.elapsed_ms ?? 0,
+      delta_ms: (current.elapsed_ms ?? 0) - (baseline.elapsed_ms ?? 0),
+    },
   };
 }
 
@@ -216,6 +273,8 @@ export async function runEvaluation(
   sampleSize: number = 50,
   onProgress?: (msg: string) => void,
 ): Promise<EvalReport> {
+  const startTime = Date.now();
+
   onProgress?.("Sampling articles...");
   const articles = sampleArticles(sampleSize);
   onProgress?.(`Sampled ${articles.length} articles.`);
@@ -238,6 +297,7 @@ export async function runEvaluation(
   return {
     date: new Date().toISOString().slice(0, 10),
     sample_size: articles.length,
+    elapsed_ms: Date.now() - startTime,
     behavioral,
     judge_results: judgeResults,
     judge_summary: judgeSummary,

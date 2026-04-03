@@ -47,8 +47,18 @@ fn copy_command_to_clipboard(app: tauri::AppHandle, command: String) -> Result<(
     Ok(())
 }
 
+fn is_japanese() -> bool {
+    for key in &["LANG", "LC_ALL", "LC_MESSAGES"] {
+        if let Ok(val) = std::env::var(key) {
+            if val.starts_with("ja") { return true; }
+        }
+    }
+    false
+}
+
 fn setup_html(claude_version: &str) -> String {
     let installed = !claude_version.is_empty();
+    let ja = is_japanese();
     format!(r#"<!DOCTYPE html>
 <html>
 <head>
@@ -98,20 +108,22 @@ fn setup_html(claude_version: &str) -> String {
     }} catch {{ return {{ installed: false, version: '' }}; }}
   }}
 
+  var _ja = {ja};
   async function copyCmd(cmd, statusId) {{
     var status = document.getElementById(statusId);
+    var okMsg = _ja ? 'コピーしました！ターミナルに貼り付けて実行してください。' : 'Copied! Paste in Terminal and run.';
+    var errMsg = _ja ? 'コピーに失敗しました。手動でコピーしてください。' : 'Copy failed. Please copy manually.';
     try {{
       await window.__TAURI__.core.invoke('copy_command_to_clipboard', {{ command: cmd }});
-      status.textContent = 'Copied! Paste in Terminal and run.';
+      status.textContent = okMsg;
       status.style.color = '#155724';
     }} catch(e) {{
-      // Fallback: browser clipboard API
       try {{
         await navigator.clipboard.writeText(cmd);
-        status.textContent = 'Copied! Paste in Terminal and run.';
+        status.textContent = okMsg;
         status.style.color = '#155724';
       }} catch(e2) {{
-        status.textContent = 'Copy failed. Please copy manually.';
+        status.textContent = errMsg;
         status.style.color = '#721c24';
       }}
     }}
@@ -137,7 +149,9 @@ fn setup_html(claude_version: &str) -> String {
       // Reload to trigger normal startup
       setTimeout(() => window.location.reload(), 1000);
     }} else {{
-      document.getElementById('retry-msg').textContent = 'Claude Code not detected yet. Complete installation in Terminal and try again.';
+      document.getElementById('retry-msg').textContent = _ja
+        ? 'Claude Codeがまだ検出されません。ターミナルでインストールを完了してから再試行してください。'
+        : 'Claude Code not detected yet. Complete installation in Terminal and try again.';
     }}
   }}
 </script>
@@ -145,9 +159,36 @@ fn setup_html(claude_version: &str) -> String {
 </html>"#,
     if installed {
         format!(r#"
-  <div class="status ok">✓ Claude Code {}</div>
-  <p>Starting server...</p>
-"#, claude_version)
+  <div class="status ok">✓ Claude Code {claude}</div>
+  <p>{starting}</p>
+"#, claude = claude_version,
+    starting = if ja { "サーバーを起動中..." } else { "Starting server..." })
+    } else if ja {
+        r#"
+  <div class="status missing">✗ Claude Codeがインストールされていません</div>
+  <p>Feed CuratorはClaude Codeを使って記事をキュレーションします。<br>
+     インストールしてログインしてください。</p>
+
+  <ol class="steps">
+    <li><strong>ステップ 1:</strong> Claude Codeをインストール
+      <div class="cmd">curl -fsSL https://claude.ai/install.sh | bash</div>
+      <button class="btn btn-primary" onclick="installClaude()">コマンドをコピー</button>
+      <span id="install-status"></span>
+      <p style="font-size:13px;color:#666;margin-top:4px">ターミナルを開き、貼り付けて実行してください。</p>
+    </li>
+    <li><strong>ステップ 2:</strong> Claude Codeにログイン
+      <div class="cmd">claude</div>
+      <button class="btn btn-secondary" onclick="loginClaude()">コマンドをコピー</button>
+      <span id="login-status"></span>
+      <p style="font-size:13px;color:#666;margin-top:4px">ターミナルで実行し、ブラウザでログインしてください。</p>
+    </li>
+    <li><strong>ステップ 3:</strong> ここに戻る
+      <br><br>
+      <button class="btn btn-primary" onclick="retry()">再チェック</button>
+      <span id="retry-msg" style="display:block;margin-top:8px;color:#721c24;font-size:13px"></span>
+    </li>
+  </ol>
+"#.to_string()
     } else {
         r#"
   <div class="status missing">✗ Claude Code is not installed</div>

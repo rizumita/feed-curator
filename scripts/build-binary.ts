@@ -26,10 +26,14 @@ export const EMBEDDED_STARTER_FEEDS = ${JSON.stringify(starterFeeds)};
 
 console.log("Generated embedded assets module");
 
+// Read version from package.json
+const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
+const appVersion = pkg.version;
+
 // Compile
 mkdirSync(OUT_DIR, { recursive: true });
 const bunPath = process.argv[0] || "bun";
-const proc = Bun.spawnSync([bunPath, "build", join(ROOT, "src", "cli.ts"), "--compile", "--outfile", join(OUT_DIR, "feed-curator-bin")], {
+const proc = Bun.spawnSync([bunPath, "build", join(ROOT, "src", "cli.ts"), "--compile", `--define`, `__APP_VERSION__="${appVersion}"`, "--outfile", join(OUT_DIR, "feed-curator-bin")], {
   cwd: ROOT,
   stdout: "inherit",
   stderr: "inherit",

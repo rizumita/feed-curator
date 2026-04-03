@@ -1,6 +1,6 @@
 {
   "name": "feed-curator",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Personalized RSS briefings for developers, powered by Claude Code. No API keys needed.",
   "author": "Ryoichi Izumita <r.izumita@caph.jp>",
   "license": "MIT",

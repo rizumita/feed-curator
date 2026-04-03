@@ -9,3 +9,6 @@ bun.lock
 .env.*
 tasks/*.png
 src/__test_tmp__/
+src-tauri/target/
+src-tauri/binaries/
+src/_generated-assets.ts

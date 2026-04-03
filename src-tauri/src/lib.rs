@@ -7,6 +7,7 @@ struct SidecarChild(std::sync::Mutex<Option<tauri_plugin_shell::process::Command
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -24,15 +25,29 @@ pub fn run() {
                 .args(["serve", "--port", "3200"]);
 
             let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
-
-            // Store child handle for cleanup on exit
             app.manage(SidecarChild(std::sync::Mutex::new(Some(child))));
 
-            // Wait briefly for server to start, then navigate to it
+            // Wait for server to start, then navigate and inject link handler
             let window = app.get_webview_window("main").unwrap();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 let _ = window.eval("window.location.replace('http://localhost:3200')");
+                // Inject external link handler after page loads
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                let _ = window.eval(r#"
+                    document.addEventListener('click', function(e) {
+                        var link = e.target.closest('a[href]');
+                        if (!link) return;
+                        var href = link.getAttribute('href');
+                        if (href && !href.startsWith('/') && !href.startsWith('http://localhost')) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (window.__TAURI__) {
+                                window.__TAURI__.opener.openUrl(href);
+                            }
+                        }
+                    }, true);
+                "#);
             });
 
             Ok(())

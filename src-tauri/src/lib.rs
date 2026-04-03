@@ -187,7 +187,7 @@ pub fn run() {
                 )?;
             }
 
-            let claude_version = detect_claude();
+            let claude_version = if std::env::var("FORCE_SETUP").is_ok() { String::new() } else { detect_claude() };
             let claude_installed = !claude_version.is_empty();
 
             let window = app.get_webview_window("main").unwrap();

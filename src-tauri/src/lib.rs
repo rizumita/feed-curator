@@ -5,24 +5,44 @@ use std::process::Command;
 
 struct SidecarChild(std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
 
-/// Check if Claude Code CLI is installed and return version or empty string
-fn detect_claude() -> String {
-    Command::new("claude")
-        .arg("--version")
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_default()
+/// Common paths where Claude Code CLI might be installed
+fn claude_paths() -> Vec<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    vec![
+        "claude".to_string(),
+        format!("{}/.local/bin/claude", home),
+        format!("{}/.claude/bin/claude", home),
+        "/usr/local/bin/claude".to_string(),
+        "/opt/homebrew/bin/claude".to_string(),
+    ]
+}
+
+/// Check if Claude Code CLI is installed and return (path, version) or empty
+fn detect_claude() -> (String, String) {
+    for path in claude_paths() {
+        if let Some(version) = Command::new(&path)
+            .arg("--version")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+        {
+            if !version.is_empty() {
+                return (path, version);
+            }
+        }
+    }
+    (String::new(), String::new())
 }
 
 #[tauri::command]
 fn check_claude_status() -> serde_json::Value {
-    let version = detect_claude();
+    let (path, version) = detect_claude();
     serde_json::json!({
         "installed": !version.is_empty(),
         "version": version,
+        "path": path,
     })
 }
 
@@ -244,18 +264,35 @@ pub fn run() {
                 )?;
             }
 
-            let claude_version = if std::env::var("FORCE_SETUP").is_ok() { String::new() } else { detect_claude() };
+            let (claude_path, claude_version) = if std::env::var("FORCE_SETUP").is_ok() {
+                (String::new(), String::new())
+            } else {
+                detect_claude()
+            };
             let claude_installed = !claude_version.is_empty();
 
             let window = app.get_webview_window("main").unwrap();
 
             if claude_installed {
+                // Extend PATH so the sidecar can find claude CLI
+                let claude_dir = std::path::Path::new(&claude_path)
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                let current_path = std::env::var("PATH").unwrap_or_default();
+                let extended_path = if claude_dir.is_empty() {
+                    current_path
+                } else {
+                    format!("{}:{}", claude_dir, current_path)
+                };
+
                 // Claude is available — launch sidecar normally
                 let sidecar = app
                     .shell()
                     .sidecar("feed-curator")
                     .expect("failed to find feed-curator sidecar")
-                    .args(["serve", "--port", "3200"]);
+                    .args(["serve", "--port", "3200"])
+                    .env("PATH", &extended_path);
 
                 let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
                 app.manage(SidecarChild(std::sync::Mutex::new(Some(child))));

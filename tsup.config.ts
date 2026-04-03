@@ -11,7 +11,7 @@ export default defineConfig({
   clean: true,
   splitting: false,
   sourcemap: false,
-  external: ["sql.js"],
+  external: ["sql.js", "bun:sqlite"],
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   async onSuccess() {
     cpSync("src/web", "dist/web", { recursive: true });

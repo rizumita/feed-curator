@@ -11,6 +11,7 @@ import { startServer } from "./server";
 import { generateProfile, formatProfile, profileForPrompt } from "./profile";
 import { aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
 import { generateDigestMarkdown } from "./digest";
+import { runEvaluation } from "./eval";
 
 const program = new Command();
 program.name("feed-curator").description("AI-powered RSS feed curation tool");
@@ -325,6 +326,37 @@ program
       console.log(`Digest written to ${opts.output}`);
     } else {
       console.log(md);
+    }
+  });
+
+// feed eval
+program
+  .command("eval")
+  .description("Evaluate curation quality using LLM-as-judge")
+  .option("-n, --sample <n>", "Number of articles to sample", "30")
+  .option("-o, --output <path>", "Save report to file")
+  .action(async (opts: { sample: string; output?: string }) => {
+    const sampleSize = Math.max(1, Math.min(100, parseInt(opts.sample, 10) || 30));
+    const report = await runEvaluation(sampleSize, console.log);
+
+    console.log("\n=== Behavioral Metrics ===");
+    console.log(`Curated: ${report.behavioral.total_curated} | Read: ${report.behavioral.total_read} | Dismissed: ${report.behavioral.total_dismissed} | Read rate: ${(report.behavioral.read_rate * 100).toFixed(1)}%`);
+    for (const b of report.behavioral.score_bands) {
+      console.log(`  ${b.band}: ${b.total} articles, ${(b.read_rate * 100).toFixed(1)}% read`);
+    }
+
+    if (report.judge_results.length > 0) {
+      console.log("\n=== LLM Judge Summary ===");
+      console.log(`Score accuracy: ${report.judge_summary.avg_score_accuracy.toFixed(2)}/5`);
+      console.log(`Summary quality: ${report.judge_summary.avg_summary_quality.toFixed(2)}/5`);
+      console.log(`Tag relevance: ${report.judge_summary.avg_tag_relevance.toFixed(2)}/5`);
+      console.log(`Overall: ${report.judge_summary.avg_overall.toFixed(2)}/5`);
+    }
+
+    if (opts.output) {
+      mkdirSync(dirname(opts.output), { recursive: true });
+      writeFileSync(opts.output, JSON.stringify(report, null, 2), "utf-8");
+      console.log(`\nReport saved to ${opts.output}`);
     }
   });
 

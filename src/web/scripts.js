@@ -521,6 +521,11 @@ document.addEventListener('click', function(e) {
   if (!href.startsWith('http')) return;
   e.preventDefault();
   e.stopPropagation();
+  // Mark as read if this is an article link
+  var card = link.closest('.card');
+  if (card && card.dataset.id) {
+    markRead(Number(card.dataset.id));
+  }
   fetch('/api/open-url', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},

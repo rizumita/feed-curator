@@ -1,8 +1,175 @@
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_window_state::AppHandleExt;
+use std::process::Command;
 
 struct SidecarChild(std::sync::Mutex<Option<tauri_plugin_shell::process::CommandChild>>);
+
+/// Check if Claude Code CLI is installed and return version or empty string
+fn detect_claude() -> String {
+    Command::new("claude")
+        .arg("--version")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+fn check_claude_status() -> serde_json::Value {
+    let version = detect_claude();
+    serde_json::json!({
+        "installed": !version.is_empty(),
+        "version": version,
+    })
+}
+
+#[tauri::command]
+fn open_terminal_with_command(command: String) {
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!(
+            r#"tell application "Terminal"
+                activate
+                do script "{}"
+            end tell"#,
+            command.replace('"', r#"\""#)
+        );
+        let _ = Command::new("osascript").arg("-e").arg(&script).spawn();
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Try common terminal emulators
+        for term in &["gnome-terminal", "konsole", "xterm"] {
+            if Command::new(term).arg("-e").arg(&command).spawn().is_ok() {
+                break;
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("cmd").args(["/c", "start", "cmd", "/k", &command]).spawn();
+    }
+}
+
+fn setup_html(claude_version: &str) -> String {
+    let installed = !claude_version.is_empty();
+    format!(r#"<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Feed Curator</title>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+         display: flex; align-items: center; justify-content: center;
+         height: 100vh; background: #faf9fb; color: #333; }}
+  .setup {{ text-align: center; max-width: 480px; padding: 40px; }}
+  .logo {{ font-size: 48px; margin-bottom: 16px; }}
+  h1 {{ font-size: 24px; margin-bottom: 8px; color: #1a1a2e; }}
+  p {{ color: #666; margin-bottom: 24px; line-height: 1.6; }}
+  .status {{ display: inline-flex; align-items: center; gap: 8px;
+             padding: 8px 16px; border-radius: 8px; margin-bottom: 24px;
+             font-size: 14px; }}
+  .status.ok {{ background: #d4edda; color: #155724; }}
+  .status.missing {{ background: #f8d7da; color: #721c24; }}
+  .btn {{ display: inline-block; padding: 12px 24px; border-radius: 8px;
+          border: none; font-size: 16px; cursor: pointer;
+          font-weight: 600; margin: 4px; }}
+  .btn-primary {{ background: #7c3aed; color: white; }}
+  .btn-primary:hover {{ background: #6d28d9; }}
+  .btn-secondary {{ background: #e5e7eb; color: #374151; }}
+  .btn-secondary:hover {{ background: #d1d5db; }}
+  .cmd {{ background: #1a1a2e; color: #a5b4fc; padding: 12px 16px;
+          border-radius: 8px; font-family: monospace; font-size: 13px;
+          margin: 16px 0; text-align: left; }}
+  .spinner {{ display: none; margin: 16px auto; }}
+  .steps {{ text-align: left; margin: 16px 0; }}
+  .steps li {{ margin: 8px 0; color: #555; }}
+  .steps li.done {{ color: #155724; }}
+</style>
+</head>
+<body>
+<div class="setup" id="setup">
+  <div class="logo">📰</div>
+  <h1>Feed Curator</h1>
+  {}
+</div>
+<script>
+  async function checkClaude() {{
+    try {{
+      const result = await window.__TAURI__.core.invoke('check_claude_status');
+      return result;
+    }} catch {{ return {{ installed: false, version: '' }}; }}
+  }}
+
+  async function runInTerminal(cmd) {{
+    try {{
+      await window.__TAURI__.core.invoke('open_terminal_with_command', {{ command: cmd }});
+    }} catch(e) {{ console.error(e); }}
+  }}
+
+  async function installClaude() {{
+    document.getElementById('install-status').textContent = 'Opening Terminal...';
+    await runInTerminal('curl -fsSL https://claude.ai/install.sh | bash');
+  }}
+
+  async function loginClaude() {{
+    document.getElementById('login-status').textContent = 'Opening Terminal...';
+    await runInTerminal('claude');
+  }}
+
+  async function retry() {{
+    const status = await checkClaude();
+    if (status.installed) {{
+      document.getElementById('setup').innerHTML = `
+        <div class="logo">📰</div>
+        <h1>Feed Curator</h1>
+        <div class="status ok">✓ Claude Code ${{status.version}}</div>
+        <p>Starting server...</p>
+      `;
+      // Reload to trigger normal startup
+      setTimeout(() => window.location.reload(), 1000);
+    }} else {{
+      document.getElementById('retry-msg').textContent = 'Claude Code not detected yet. Complete installation in Terminal and try again.';
+    }}
+  }}
+</script>
+</body>
+</html>"#,
+    if installed {
+        format!(r#"
+  <div class="status ok">✓ Claude Code {}</div>
+  <p>Starting server...</p>
+"#, claude_version)
+    } else {
+        r#"
+  <div class="status missing">✗ Claude Code is not installed</div>
+  <p>Feed Curator requires Claude Code to curate articles.<br>
+     Install it and log in to get started.</p>
+
+  <ol class="steps">
+    <li><strong>Step 1:</strong> Install Claude Code
+      <div class="cmd">curl -fsSL https://claude.ai/install.sh | bash</div>
+      <button class="btn btn-primary" onclick="installClaude()">Open Terminal &amp; Install</button>
+      <span id="install-status"></span>
+    </li>
+    <li><strong>Step 2:</strong> Log in to Claude Code
+      <div class="cmd">claude</div>
+      <button class="btn btn-secondary" onclick="loginClaude()">Open Terminal &amp; Login</button>
+      <span id="login-status"></span>
+    </li>
+    <li><strong>Step 3:</strong> Come back here
+      <br><br>
+      <button class="btn btn-primary" onclick="retry()">Check Again</button>
+      <span id="retry-msg" style="display:block;margin-top:8px;color:#721c24;font-size:13px"></span>
+    </li>
+  </ol>
+"#.to_string()
+    })
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -10,6 +177,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![check_claude_status, open_terminal_with_command])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -19,37 +187,53 @@ pub fn run() {
                 )?;
             }
 
-            // Launch the feed-curator sidecar
-            let sidecar = app
-                .shell()
-                .sidecar("feed-curator")
-                .expect("failed to find feed-curator sidecar")
-                .args(["serve", "--port", "3200"]);
+            let claude_version = detect_claude();
+            let claude_installed = !claude_version.is_empty();
 
-            let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
-            app.manage(SidecarChild(std::sync::Mutex::new(Some(child))));
-
-            // Wait for server to start, then navigate and inject link handler
             let window = app.get_webview_window("main").unwrap();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                let _ = window.eval("window.location.replace('http://localhost:3200')");
-                std::thread::sleep(std::time::Duration::from_secs(1));
-                let _ = window.eval(r#"
-                    document.addEventListener('click', function(e) {
-                        var link = e.target.closest('a[href]');
-                        if (!link) return;
-                        var href = link.getAttribute('href');
-                        if (href && !href.startsWith('/') && !href.startsWith('http://localhost')) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (window.__TAURI__) {
-                                window.__TAURI__.opener.openUrl(href);
+
+            if claude_installed {
+                // Claude is available — launch sidecar normally
+                let sidecar = app
+                    .shell()
+                    .sidecar("feed-curator")
+                    .expect("failed to find feed-curator sidecar")
+                    .args(["serve", "--port", "3200"]);
+
+                let (_rx, child) = sidecar.spawn().expect("failed to spawn sidecar");
+                app.manage(SidecarChild(std::sync::Mutex::new(Some(child))));
+
+                let w = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_secs(2));
+                    let _ = w.eval("window.location.replace('http://localhost:3200')");
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    let _ = w.eval(r#"
+                        document.addEventListener('click', function(e) {
+                            var link = e.target.closest('a[href]');
+                            if (!link) return;
+                            var href = link.getAttribute('href');
+                            if (href && !href.startsWith('/') && !href.startsWith('http://localhost')) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (window.__TAURI__) {
+                                    window.__TAURI__.opener.openUrl(href);
+                                }
                             }
-                        }
-                    }, true);
-                "#);
-            });
+                        }, true);
+                    "#);
+                });
+            } else {
+                // Claude not installed — show setup screen
+                app.manage(SidecarChild(std::sync::Mutex::new(None)));
+                let html = setup_html(&claude_version);
+                let w = window.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let escaped = html.replace('\\', "\\\\").replace('`', "\\`").replace("${", "\\${");
+                    let _ = w.eval(&format!("document.open(); document.write(`{}`); document.close();", escaped));
+                });
+            }
 
             Ok(())
         })
@@ -58,9 +242,7 @@ pub fn run() {
         .run(|app, event| {
             match event {
                 tauri::RunEvent::ExitRequested { .. } => {
-                    // Save window state before exit
                     app.save_window_state(tauri_plugin_window_state::StateFlags::all()).ok();
-                    // Kill sidecar
                     if let Some(state) = app.try_state::<SidecarChild>() {
                         if let Ok(mut guard) = state.0.lock() {
                             if let Some(child) = guard.take() {
@@ -70,7 +252,6 @@ pub fn run() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    // Final cleanup
                     if let Some(state) = app.try_state::<SidecarChild>() {
                         if let Ok(mut guard) = state.0.lock() {
                             if let Some(child) = guard.take() {

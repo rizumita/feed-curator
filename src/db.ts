@@ -1,4 +1,3 @@
-import initSqlJs, { type Database as SqlJsDatabase } from "sql.js";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
@@ -7,91 +6,125 @@ const DEFAULT_DIR = join(homedir(), ".feed-curator");
 const DB_PATH = process.env.DB_PATH ?? join(DEFAULT_DIR, "feed-curator.db");
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
-// Initialize sql.js (WASM-based, no native build required)
-const SQL = await initSqlJs();
+const IS_BUN = typeof globalThis.Bun !== "undefined";
 
-const fileBuffer = existsSync(DB_PATH) ? readFileSync(DB_PATH) : undefined;
-const sqlDb: SqlJsDatabase = fileBuffer
-  ? new SQL.Database(fileBuffer)
-  : new SQL.Database();
+// ─── Bun native SQLite backend ───
 
-// Deferred save: export() resets PRAGMA and last_insert_rowid(),
-// so we batch writes and flush after synchronous code completes.
-let dirty = false;
+function createBunDb() {
+  // Dynamic import to avoid Node.js parse errors
+  const { Database } = require("bun:sqlite");
+  const bunDb = new Database(DB_PATH, { create: true });
 
-function flush(): void {
-  if (!dirty) return;
-  const data = sqlDb.export();
-  writeFileSync(DB_PATH, Buffer.from(data));
-  sqlDb.run("PRAGMA foreign_keys = ON");
-  dirty = false;
-}
-
-function scheduleSave(): void {
-  if (!dirty) {
-    dirty = true;
-    queueMicrotask(flush);
+  class BunCompatDatabase {
+    prepare(sql: string) {
+      return {
+        get(...params: unknown[]): unknown {
+          const stmt = bunDb.prepare(sql);
+          return params.length > 0 ? stmt.get(...params) : stmt.get();
+        },
+        all(...params: unknown[]): unknown[] {
+          const stmt = bunDb.prepare(sql);
+          return params.length > 0 ? stmt.all(...params) : stmt.all();
+        },
+        run(...params: unknown[]): { changes: number } {
+          const stmt = bunDb.prepare(sql);
+          const result = params.length > 0 ? stmt.run(...params) : stmt.run();
+          return { changes: result.changes };
+        },
+      };
+    }
+    exec(sql: string): void {
+      bunDb.exec(sql);
+    }
+    pragma(str: string): void {
+      bunDb.exec(`PRAGMA ${str}`);
+    }
   }
+
+  return new BunCompatDatabase();
 }
 
-process.on("exit", flush);
+// ─── sql.js (WASM) backend for Node.js ───
 
-// Wrapper exposing better-sqlite3-compatible synchronous API
-class CompatDatabase {
-  prepare(sql: string) {
-    return {
-      get(...params: unknown[]): unknown {
-        const stmt = sqlDb.prepare(sql);
-        try {
-          if (params.length > 0) stmt.bind(params);
-          if (stmt.step()) {
-            return stmt.getAsObject();
+async function createSqlJsDb() {
+  const initSqlJs = (await import("sql.js")).default;
+  const SQL = await initSqlJs();
+
+  const fileBuffer = existsSync(DB_PATH) ? readFileSync(DB_PATH) : undefined;
+  const sqlDb = fileBuffer ? new SQL.Database(fileBuffer) : new SQL.Database();
+
+  let dirty = false;
+
+  function flush(): void {
+    if (!dirty) return;
+    const data = sqlDb.export();
+    writeFileSync(DB_PATH, Buffer.from(data));
+    sqlDb.run("PRAGMA foreign_keys = ON");
+    dirty = false;
+  }
+
+  function scheduleSave(): void {
+    if (!dirty) {
+      dirty = true;
+      queueMicrotask(flush);
+    }
+  }
+
+  process.on("exit", flush);
+
+  class SqlJsCompatDatabase {
+    prepare(sql: string) {
+      return {
+        get(...params: unknown[]): unknown {
+          const stmt = sqlDb.prepare(sql);
+          try {
+            if (params.length > 0) stmt.bind(params);
+            if (stmt.step()) return stmt.getAsObject();
+            return undefined;
+          } finally {
+            stmt.free();
           }
-          return undefined;
-        } finally {
-          stmt.free();
-        }
-      },
-
-      all(...params: unknown[]): unknown[] {
-        const stmt = sqlDb.prepare(sql);
-        const results: unknown[] = [];
-        try {
-          if (params.length > 0) stmt.bind(params);
-          while (stmt.step()) {
-            results.push(stmt.getAsObject());
+        },
+        all(...params: unknown[]): unknown[] {
+          const stmt = sqlDb.prepare(sql);
+          const results: unknown[] = [];
+          try {
+            if (params.length > 0) stmt.bind(params);
+            while (stmt.step()) results.push(stmt.getAsObject());
+            return results;
+          } finally {
+            stmt.free();
           }
-          return results;
-        } finally {
-          stmt.free();
-        }
-      },
-
-      run(...params: unknown[]): { changes: number } {
-        sqlDb.run(sql, params as any[]);
-        const changes = sqlDb.getRowsModified();
-        scheduleSave();
-        return { changes };
-      },
-    };
+        },
+        run(...params: unknown[]): { changes: number } {
+          sqlDb.run(sql, params as any[]);
+          const changes = sqlDb.getRowsModified();
+          scheduleSave();
+          return { changes };
+        },
+      };
+    }
+    exec(sql: string): void {
+      sqlDb.exec(sql);
+      scheduleSave();
+    }
+    pragma(str: string): void {
+      sqlDb.run(`PRAGMA ${str}`);
+    }
   }
 
-  exec(sql: string): void {
-    sqlDb.exec(sql);
-    scheduleSave();
-  }
-
-  pragma(str: string): void {
-    sqlDb.run(`PRAGMA ${str}`);
-  }
+  return new SqlJsCompatDatabase();
 }
 
-export const db = new CompatDatabase();
+// ─── Initialize the appropriate backend ───
+
+export const db = IS_BUN ? createBunDb() : await createSqlJsDb();
+
+// ─── Schema (shared) ───
 
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
-// Schema
 db.exec(`
   CREATE TABLE IF NOT EXISTS feeds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

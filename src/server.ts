@@ -56,6 +56,19 @@ function sseHandler(
     .finally(() => { res.end(); });
 }
 
+function loadAsset(filePath: string, embeddedKey?: string): string {
+  try {
+    return readFileSync(filePath, "utf-8");
+  } catch {
+    // Fallback to embedded assets (Bun compile)
+    try {
+      const assets = require("./_generated-assets");
+      if (embeddedKey && assets[embeddedKey]) return assets[embeddedKey];
+    } catch { /* not available */ }
+    return "";
+  }
+}
+
 export function startServer(port: number = 3000): import("http").Server {
   const stylesPath = join(__dirname, "web", "styles.css");
   const scriptsPath = join(__dirname, "web", "scripts.js");
@@ -76,16 +89,14 @@ export function startServer(port: number = 3000): import("http").Server {
       }
 
       if (url.pathname === "/styles.css") {
-        const css = readFileSync(stylesPath, "utf-8");
         res.writeHead(200, { "Content-Type": "text/css; charset=utf-8" });
-        res.end(css);
+        res.end(loadAsset(stylesPath, "EMBEDDED_CSS"));
         return;
       }
 
       if (url.pathname === "/scripts.js") {
-        const js = readFileSync(scriptsPath, "utf-8");
         res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" });
-        res.end(js);
+        res.end(loadAsset(scriptsPath, "EMBEDDED_JS"));
         return;
       }
 

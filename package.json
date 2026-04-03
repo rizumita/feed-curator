@@ -26,6 +26,7 @@
     "build": "tsup",
     "dev": "tsx src/cli.ts",
     "test": "DB_PATH=./data/test.db vitest run --no-file-parallelism",
+    "build:binary": "bun run scripts/build-binary.ts",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {

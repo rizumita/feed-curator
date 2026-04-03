@@ -51,7 +51,21 @@ export function loadStarterFeeds(customPath?: string): number {
   try {
     json = JSON.parse(readFileSync(filePath, "utf-8"));
   } catch (e) {
-    throw new Error(`Failed to read feed pack: ${filePath} (${(e as Error).message})`);
+    // Fallback to embedded assets (Bun compile)
+    if (!customPath) {
+      try {
+        const assets = require("./_generated-assets");
+        if (assets.EMBEDDED_STARTER_FEEDS) {
+          json = JSON.parse(assets.EMBEDDED_STARTER_FEEDS);
+        } else {
+          throw e;
+        }
+      } catch {
+        throw new Error(`Failed to read feed pack: ${filePath} (${(e as Error).message})`);
+      }
+    } else {
+      throw new Error(`Failed to read feed pack: ${filePath} (${(e as Error).message})`);
+    }
   }
   if (!Array.isArray(json.feeds)) {
     throw new Error(`Invalid feed pack format: expected { feeds: [...] }`);

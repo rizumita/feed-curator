@@ -86,6 +86,33 @@ fn install_claude() -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn login_claude() -> Result<String, String> {
+    let (claude_path, _) = detect_claude();
+    if claude_path.is_empty() {
+        return Err("Claude Code not found. Install it first.".to_string());
+    }
+
+    // Run in a blocking thread so the UI stays responsive
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        Command::new(&claude_path)
+            .args(["auth", "login", "--claudeai"])
+            .output()
+    })
+    .await
+    .map_err(|e| format!("Thread error: {}", e))?
+    .map_err(|e| format!("Failed to run login: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&result.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&result.stderr).to_string();
+
+    if result.status.success() {
+        Ok(format!("{}\n{}", stdout, stderr).trim().to_string())
+    } else {
+        Err(format!("Login failed:\n{}\n{}", stdout, stderr))
+    }
+}
+
+#[tauri::command]
 fn copy_command_to_clipboard(app: tauri::AppHandle, command: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -109,7 +136,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![check_claude_status, copy_command_to_clipboard, install_claude, restart_app])
+        .invoke_handler(tauri::generate_handler![check_claude_status, copy_command_to_clipboard, install_claude, login_claude, restart_app])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

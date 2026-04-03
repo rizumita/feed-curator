@@ -57,6 +57,7 @@
     </li>
     <li><strong id="step2-label"></strong>
       <div class="cmd">claude</div>
+      <button class="btn btn-primary" onclick="directLogin()" id="btn-direct-login"></button>
       <button class="btn btn-secondary" onclick="copyLogin()" id="btn-login"></button>
       <span id="login-status"></span>
       <p style="font-size:13px;color:#666;margin-top:4px" id="step2-hint"></p>
@@ -101,8 +102,9 @@
       document.getElementById('btn-install').textContent = ja ? 'コマンドをコピー' : 'Copy Command';
       document.getElementById('step1-hint').textContent = ja ? 'または上のコマンドをターミナルで実行してください。' : 'Or copy the command and run in Terminal.';
       document.getElementById('step2-label').textContent = ja ? 'ステップ 2: Claude Codeにログイン' : 'Step 2: Log in to Claude Code';
+      document.getElementById('btn-direct-login').textContent = ja ? 'ログイン' : 'Login';
       document.getElementById('btn-login').textContent = ja ? 'コマンドをコピー' : 'Copy Command';
-      document.getElementById('step2-hint').textContent = ja ? 'ターミナルで実行し、ブラウザでログインしてください。' : 'Open Terminal, paste, and follow the login prompts.';
+      document.getElementById('step2-hint').textContent = ja ? 'ブラウザが開きます。ログイン後ここに戻ってください。' : 'Browser will open. Return here after login.';
       document.getElementById('step3-label').textContent = ja ? 'ステップ 3: ここに戻る' : 'Step 3: Come back here';
       document.getElementById('btn-retry').textContent = ja ? '再チェック' : 'Check Again';
     }
@@ -128,6 +130,26 @@
 
   function copyInstall() { copyToClipboard('curl -fsSL https://claude.ai/install.sh | bash', 'install-status'); }
   function copyLogin() { copyToClipboard('claude', 'login-status'); }
+
+  async function directLogin() {
+    var status = document.getElementById('login-status');
+    var ja = window._feedCuratorState.ja;
+    var btn = document.getElementById('btn-direct-login');
+    btn.disabled = true;
+    btn.textContent = ja ? 'ブラウザを開いています...' : 'Opening browser...';
+    status.textContent = '';
+    try {
+      await window.__TAURI__.core.invoke('login_claude');
+      status.textContent = ja ? 'ログイン完了！ステップ3に進んでください。' : 'Logged in! Proceed to Step 3.';
+      status.style.color = '#155724';
+      btn.textContent = ja ? '完了' : 'Done';
+    } catch(e) {
+      status.textContent = (ja ? 'ログイン失敗: ' : 'Login failed: ') + e;
+      status.style.color = '#721c24';
+      btn.disabled = false;
+      btn.textContent = ja ? 'ログイン' : 'Login';
+    }
+  }
 
   async function directInstall() {
     var status = document.getElementById('install-status');

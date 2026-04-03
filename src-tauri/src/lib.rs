@@ -69,6 +69,23 @@ fn restart_app(app: tauri::AppHandle) {
 }
 
 #[tauri::command]
+fn install_claude() -> Result<String, String> {
+    let output = Command::new("/bin/bash")
+        .args(["-c", "curl -fsSL https://claude.ai/install.sh | bash 2>&1"])
+        .output()
+        .map_err(|e| format!("Failed to run installer: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        Ok(format!("{}\n{}", stdout, stderr).trim().to_string())
+    } else {
+        Err(format!("Install failed:\n{}\n{}", stdout, stderr))
+    }
+}
+
+#[tauri::command]
 fn copy_command_to_clipboard(app: tauri::AppHandle, command: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -92,7 +109,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![check_claude_status, copy_command_to_clipboard, restart_app])
+        .invoke_handler(tauri::generate_handler![check_claude_status, copy_command_to_clipboard, install_claude, restart_app])
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(

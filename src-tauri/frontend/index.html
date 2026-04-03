@@ -50,7 +50,8 @@
   <ol class="steps">
     <li><strong id="step1-label"></strong>
       <div class="cmd">curl -fsSL https://claude.ai/install.sh | bash</div>
-      <button class="btn btn-primary" onclick="copyInstall()" id="btn-install"></button>
+      <button class="btn btn-primary" onclick="directInstall()" id="btn-direct-install"></button>
+      <button class="btn btn-secondary" onclick="copyInstall()" id="btn-install"></button>
       <span id="install-status"></span>
       <p style="font-size:13px;color:#666;margin-top:4px" id="step1-hint"></p>
     </li>
@@ -96,8 +97,9 @@
         ? 'Feed CuratorはClaude Codeを使って記事をキュレーションします。<br>インストールしてログインしてください。'
         : 'Feed Curator requires Claude Code to curate articles.<br>Install it and log in to get started.';
       document.getElementById('step1-label').textContent = ja ? 'ステップ 1: Claude Codeをインストール' : 'Step 1: Install Claude Code';
+      document.getElementById('btn-direct-install').textContent = ja ? 'インストール' : 'Install Now';
       document.getElementById('btn-install').textContent = ja ? 'コマンドをコピー' : 'Copy Command';
-      document.getElementById('step1-hint').textContent = ja ? 'ターミナルを開き、貼り付けて実行してください。' : 'Open Terminal, paste, and run.';
+      document.getElementById('step1-hint').textContent = ja ? 'または上のコマンドをターミナルで実行してください。' : 'Or copy the command and run in Terminal.';
       document.getElementById('step2-label').textContent = ja ? 'ステップ 2: Claude Codeにログイン' : 'Step 2: Log in to Claude Code';
       document.getElementById('btn-login').textContent = ja ? 'コマンドをコピー' : 'Copy Command';
       document.getElementById('step2-hint').textContent = ja ? 'ターミナルで実行し、ブラウザでログインしてください。' : 'Open Terminal, paste, and follow the login prompts.';
@@ -126,6 +128,26 @@
 
   function copyInstall() { copyToClipboard('curl -fsSL https://claude.ai/install.sh | bash', 'install-status'); }
   function copyLogin() { copyToClipboard('claude', 'login-status'); }
+
+  async function directInstall() {
+    var status = document.getElementById('install-status');
+    var ja = window._feedCuratorState.ja;
+    var btn = document.getElementById('btn-direct-install');
+    btn.disabled = true;
+    btn.textContent = ja ? 'インストール中...' : 'Installing...';
+    status.textContent = '';
+    try {
+      var result = await window.__TAURI__.core.invoke('install_claude');
+      status.textContent = ja ? 'インストール完了！ステップ2に進んでください。' : 'Installed! Proceed to Step 2.';
+      status.style.color = '#155724';
+      btn.textContent = ja ? '完了' : 'Done';
+    } catch(e) {
+      status.textContent = (ja ? 'インストール失敗: ' : 'Install failed: ') + e;
+      status.style.color = '#721c24';
+      btn.disabled = false;
+      btn.textContent = ja ? '直接インストール' : 'Install Now';
+    }
+  }
 
   async function retry() {
     var retryMsg = document.getElementById('retry-msg');

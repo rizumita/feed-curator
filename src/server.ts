@@ -70,6 +70,36 @@ function loadAsset(filePath: string, embeddedKey?: string): string {
   }
 }
 
+const DEFAULT_AUTO_UPDATE_HOURS = 6;
+
+async function runFullUpdate(onProgress?: (msg: string) => void): Promise<{ newArticles: number; curated: number; briefing: boolean }> {
+  const send = onProgress ?? (() => {});
+  send("Fetching feeds...");
+  const newArticles = await fetchAllFeeds({ onProgress: send });
+  send(`Fetched ${newArticles} new article(s).`);
+
+  if (isPreferenceMemoStale()) {
+    await aiGenerateMemo(send);
+  }
+
+  send("AI curating articles...");
+  const curated = await aiCurate(send);
+  if (curated > 0) {
+    send(`Curated ${curated} article(s).`);
+  } else {
+    send("No articles to curate.");
+  }
+
+  send("Generating briefing...");
+  const briefing = await aiBriefing(send);
+
+  const archiveDays = getAutoArchiveDays();
+  const archived = runAutoArchive(archiveDays);
+  if (archived > 0) send(`Auto-archived ${archived} old article(s).`);
+
+  return { newArticles, curated, briefing };
+}
+
 export function startServer(port: number = 3000): import("http").Server {
   const stylesPath = join(__dirname, "web", "styles.css");
   const scriptsPath = join(__dirname, "web", "scripts.js");
@@ -158,35 +188,7 @@ export function startServer(port: number = 3000): import("http").Server {
       // POST /api/update — fetch → curate (new only) → briefing in sequence (SSE)
       if (url.pathname === "/api/update" && method === "POST") {
         sseHandler(res, async (send) => {
-          // 1. Fetch
-          send("Fetching feeds...");
-          const newArticles = await fetchAllFeeds({ onProgress: send });
-          send(`Fetched ${newArticles} new article(s).`);
-
-          // 1.5. Regenerate preference memo if stale
-          if (isPreferenceMemoStale()) {
-            await aiGenerateMemo(send);
-          }
-
-          // 2. Curate uncurated articles
-          send("AI curating articles...");
-          const curated = await aiCurate(send);
-          if (curated > 0) {
-            send(`Curated ${curated} article(s).`);
-          } else {
-            send("No articles to curate.");
-          }
-
-          // 3. Briefing
-          send("Generating briefing...");
-          const ok = await aiBriefing(send);
-
-          // 4. Auto-archive
-          const archiveDays = getAutoArchiveDays();
-          const archived = runAutoArchive(archiveDays);
-          if (archived > 0) send(`Auto-archived ${archived} old article(s).`);
-
-          return { newArticles, curated, briefing: ok };
+          return await runFullUpdate(send);
         });
         return;
       }
@@ -284,6 +286,27 @@ export function startServer(port: number = 3000): import("http").Server {
         return;
       }
 
+      // GET /api/config/auto-update — get auto-update interval
+      if (url.pathname === "/api/config/auto-update" && method === "GET") {
+        const hours = parseInt(getConfig("auto_update_hours") ?? "", 10) || DEFAULT_AUTO_UPDATE_HOURS;
+        jsonResponse(res, { hours });
+        return;
+      }
+
+      // POST /api/config/auto-update — set auto-update interval (requires restart)
+      if (url.pathname === "/api/config/auto-update" && method === "POST") {
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
+        const { hours } = body as { hours: unknown };
+        if (typeof hours !== "number" || hours < 0 || hours > 168) {
+          jsonResponse(res, { error: "hours must be 0-168 (0 = disabled)" }, 400);
+          return;
+        }
+        setConfig("auto_update_hours", String(hours));
+        jsonResponse(res, { ok: true, hours, note: "Restart to apply" });
+        return;
+      }
+
       // DELETE /api/feeds/:id — remove a feed
       const feedDeleteMatch = url.pathname.match(/^\/api\/feeds\/(\d+)$/);
       if (feedDeleteMatch && method === "DELETE") {
@@ -332,6 +355,22 @@ export function startServer(port: number = 3000): import("http").Server {
   server.listen(port, () => {
     console.log(`Feed Curator running at http://localhost:${port}`);
   });
+
+  // Auto-update timer
+  const autoUpdateHours = parseInt(getConfig("auto_update_hours") ?? "", 10) || DEFAULT_AUTO_UPDATE_HOURS;
+  if (autoUpdateHours > 0) {
+    const intervalMs = autoUpdateHours * 60 * 60 * 1000;
+    console.log(`Auto-update enabled: every ${autoUpdateHours} hour(s)`);
+    setInterval(async () => {
+      console.log(`[auto-update] Starting scheduled update...`);
+      try {
+        const result = await runFullUpdate((msg) => console.log(`[auto-update] ${msg}`));
+        console.log(`[auto-update] Done: ${result.newArticles} new, ${result.curated} curated`);
+      } catch (e) {
+        console.error(`[auto-update] Failed:`, e);
+      }
+    }, intervalMs);
+  }
 
   return server;
 }

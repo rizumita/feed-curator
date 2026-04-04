@@ -85,7 +85,7 @@ function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): 
   const tagsHtml = tags.map((t: string) => `<span class="tag" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</span>`).join("");
 
   return `
-    <article class="card${isRead ? " read" : ""}${uncurated ? " uncurated" : ""}" data-id="${a.id}" data-tier="${uncurated ? "uncurated" : tier.id}" data-tags="${escapeHtml(tags.join(","))}" data-category="${escapeHtml(a.category ?? "")}">
+    <article class="card${isRead ? " read" : ""}${uncurated ? " uncurated" : ""}" data-id="${a.id}" data-tier="${uncurated ? "uncurated" : tier.id}" data-tags="${escapeHtml(tags.join(","))}" data-category="${escapeHtml(a.category ?? "")}" data-date="${a.published_at ?? a.fetched_at}">
       <div class="card-row">
         <button class="read-btn${isRead ? " is-read" : ""}" onclick="toggleRead(${a.id})" title="${isRead ? "Mark unread" : "Mark read"}">
           ${isRead ? "✓" : ""}
@@ -357,6 +357,18 @@ export function renderPage(
           <button class="filter-btn active" data-value="all" onclick="filterArticles('all')">All</button>
           <button class="filter-btn" data-value="unread" onclick="filterArticles('unread')">Unread only</button>
           <button class="filter-btn" data-value="read" onclick="filterArticles('read')">Read only</button>
+        </div>
+        <div class="period-filter" style="margin-top:0.5rem">
+          <select id="period-filter" onchange="filterByPeriod(this.value)">
+            <option value="all">All time</option>
+            <option value="1">Today</option>
+            <option value="3">3 days</option>
+            <option value="7" selected>7 days</option>
+            <option value="14">14 days</option>
+            <option value="30">30 days</option>
+            <option value="90">3 months</option>
+            <option value="180">6 months</option>
+          </select>
         </div>
       </div>
 

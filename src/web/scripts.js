@@ -99,7 +99,15 @@ function updateURL() {
   history.replaceState(null, '', qs ? '?' + qs : location.pathname);
 }
 
+var currentPeriodDays = 7;
+
+function filterByPeriod(days) {
+  currentPeriodDays = days === 'all' ? 0 : Number(days);
+  applyFilters();
+}
+
 function applyFilters() {
+  var cutoff = currentPeriodDays > 0 ? Date.now() - currentPeriodDays * 24 * 60 * 60 * 1000 : 0;
   document.querySelectorAll('.card').forEach(card => {
     const isRead = card.classList.contains('read');
     const tags = (card.dataset.tags || '').split(',').map(t => t.trim());
@@ -109,6 +117,10 @@ function applyFilters() {
     if (currentReadFilter === 'read' && !isRead) show = false;
     if (currentTagFilter !== 'all' && !tags.includes(currentTagFilter)) show = false;
     if (currentCategoryFilter !== 'all' && category !== currentCategoryFilter) show = false;
+    if (cutoff > 0 && card.dataset.date) {
+      var articleDate = new Date(card.dataset.date).getTime();
+      if (articleDate < cutoff) show = false;
+    }
     card.style.display = show ? '' : 'none';
   });
   document.querySelectorAll('.tier-section').forEach(sec => {

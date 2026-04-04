@@ -100,6 +100,16 @@ async function runFullUpdate(onProgress?: (msg: string) => void): Promise<{ newA
   return { newArticles, curated, briefing };
 }
 
+// SSE event bus for push notifications to connected clients
+const sseClients = new Set<import("http").ServerResponse>();
+
+function broadcastEvent(event: string, data: unknown): void {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    try { client.write(msg); } catch { sseClients.delete(client); }
+  }
+}
+
 export function startServer(port: number = 3000): import("http").Server {
   const stylesPath = join(__dirname, "web", "styles.css");
   const scriptsPath = join(__dirname, "web", "scripts.js");
@@ -344,6 +354,19 @@ export function startServer(port: number = 3000): import("http").Server {
         return;
       }
 
+      // GET /api/events — SSE stream for push notifications
+      if (url.pathname === "/api/events" && method === "GET") {
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        });
+        res.write("event: connected\ndata: {}\n\n");
+        sseClients.add(res);
+        req.on("close", () => sseClients.delete(res));
+        return;
+      }
+
       res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
       res.end("Not Found");
     } catch (err) {
@@ -367,6 +390,7 @@ export function startServer(port: number = 3000): import("http").Server {
       try {
         const result = await runFullUpdate((msg) => console.log(`[auto-update] ${msg}`));
         console.log(`[auto-update] Done: ${result.newArticles} new, ${result.curated} curated`);
+        broadcastEvent("auto-update-done", result);
       } catch (e) {
         console.error(`[auto-update] Failed:`, e);
       }

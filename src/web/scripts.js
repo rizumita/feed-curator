@@ -532,6 +532,27 @@ async function setAutoUpdate(hours) {
   });
 }
 
+// Request notification permission on page load
+if ('Notification' in window && Notification.permission === 'default') {
+  Notification.requestPermission();
+}
+
+// Listen for auto-update events via SSE
+(function() {
+  var evtSource = new EventSource('/api/events');
+  evtSource.addEventListener('auto-update-done', function(e) {
+    var data = JSON.parse(e.data);
+    if (data.newArticles > 0 || data.curated > 0) {
+      var body = data.newArticles + ' new article(s), ' + data.curated + ' curated';
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Feed Curator', { body: body, icon: '/favicon.svg' });
+      }
+      // Reload to show new articles
+      setTimeout(function() { location.reload(); }, 2000);
+    }
+  });
+})();
+
 // Open external links in system browser (Tauri desktop app support)
 document.addEventListener('click', function(e) {
   var link = e.target.closest('a[href]');

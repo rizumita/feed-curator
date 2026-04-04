@@ -697,6 +697,16 @@ footer {
   margin-bottom: 0.5rem;
 }
 
+.auto-update-setting select {
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
 .discover-input {
   flex: 1;
   min-width: 0;

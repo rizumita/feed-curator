@@ -512,6 +512,14 @@ document.querySelectorAll('.briefing-cluster').forEach(function(cluster) {
   if (!hasUnprocessed && cards.length > 0) cluster.style.display = 'none';
 });
 
+async function setAutoUpdate(hours) {
+  await fetch('/api/config/auto-update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({hours: Number(hours)})
+  });
+}
+
 // Open external links in system browser (Tauri desktop app support)
 document.addEventListener('click', function(e) {
   var link = e.target.closest('a[href]');

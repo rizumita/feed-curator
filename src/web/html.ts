@@ -232,6 +232,7 @@ export function renderPage(
   briefing?: Briefing | null,
   language?: string | null,
   feeds?: Feed[],
+  autoUpdateHours?: number,
 ): string {
   const now = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -367,6 +368,20 @@ export function renderPage(
           ${allTags.map(t => `<button class="tag-filter" data-value="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join("\n")}
         </div>
       </div>` : ""}
+
+      <div class="sidebar-section">
+        <div class="sidebar-heading">Auto Update</div>
+        <div class="auto-update-setting">
+          <select id="auto-update-hours" onchange="setAutoUpdate(this.value)">
+            <option value="0"${autoUpdateHours === 0 ? " selected" : ""}>Off</option>
+            <option value="1"${autoUpdateHours === 1 ? " selected" : ""}>1h</option>
+            <option value="3"${autoUpdateHours === 3 ? " selected" : ""}>3h</option>
+            <option value="6"${(autoUpdateHours ?? 6) === 6 ? " selected" : ""}>6h</option>
+            <option value="12"${autoUpdateHours === 12 ? " selected" : ""}>12h</option>
+            <option value="24"${autoUpdateHours === 24 ? " selected" : ""}>24h</option>
+          </select>
+        </div>
+      </div>
 
       <div class="sidebar-section toc">
         <div class="sidebar-heading">Sections</div>

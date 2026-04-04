@@ -332,7 +332,8 @@ export function startServer(port: number = 3000): import("http").Server {
         const effectiveView = (view === "briefing" && !briefing) ? "all" : view;
         const language = getConfig("language");
         const allFeeds = view === "feeds" ? listFeeds() : undefined;
-        const html = renderPage(articles, stats, sort, effectiveView, briefing, language, allFeeds);
+        const autoUpdateHours = parseInt(getConfig("auto_update_hours") ?? "", 10) || DEFAULT_AUTO_UPDATE_HOURS;
+        const html = renderPage(articles, stats, sort, effectiveView, briefing, language, allFeeds, autoUpdateHours);
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
           "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",

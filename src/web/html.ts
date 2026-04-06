@@ -1,5 +1,6 @@
 import type { Briefing, BriefingCluster } from "../types";
 import type { ArticleWithFeed } from "../article";
+import { DEFAULT_AI_BACKEND, DEFAULT_OLLAMA_MODEL } from "../ai-backend";
 
 declare const __APP_VERSION__: string;
 const version = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
@@ -233,6 +234,8 @@ export function renderPage(
   language?: string | null,
   feeds?: Feed[],
   autoUpdateHours?: number,
+  aiBackend?: string,
+  ollamaModel?: string,
 ): string {
   const now = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -392,6 +395,17 @@ export function renderPage(
             <option value="12"${autoUpdateHours === 12 ? " selected" : ""}>12h</option>
             <option value="24"${autoUpdateHours === 24 ? " selected" : ""}>24h</option>
           </select>
+        </div>
+      </div>
+
+        <div class="sidebar-section">
+        <div class="sidebar-heading">AI Backend</div>
+        <div class="ai-backend-setting">
+          <select id="ai-backend" onchange="setAiBackend(this.value)">
+            <option value="claude"${(aiBackend ?? DEFAULT_AI_BACKEND) === "claude" ? " selected" : ""}>Claude</option>
+            <option value="ollama"${aiBackend === "ollama" ? " selected" : ""}>Ollama</option>
+          </select>
+          <input type="text" id="ollama-model" value="${escapeHtml(ollamaModel ?? DEFAULT_OLLAMA_MODEL)}" placeholder="Model name" class="ollama-model-input" onchange="setOllamaModel(this.value)"${aiBackend !== "ollama" ? ' style="display:none"' : ""} />
         </div>
       </div>
 

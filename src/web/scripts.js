@@ -524,6 +524,26 @@ document.querySelectorAll('.briefing-cluster').forEach(function(cluster) {
   if (!hasUnprocessed && cards.length > 0) cluster.style.display = 'none';
 });
 
+async function setAiBackend(backend) {
+  var modelInput = document.getElementById('ollama-model');
+  modelInput.style.display = backend === 'ollama' ? '' : 'none';
+  var model = modelInput.value.trim() || 'gemma4:31b';
+  await fetch('/api/config/ai-backend', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({backend: backend, model: model})
+  });
+}
+
+async function setOllamaModel(model) {
+  var backend = document.getElementById('ai-backend').value;
+  await fetch('/api/config/ai-backend', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({backend: backend, model: model.trim()})
+  });
+}
+
 async function setAutoUpdate(hours) {
   await fetch('/api/config/auto-update', {
     method: 'POST',

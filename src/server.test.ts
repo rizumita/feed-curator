@@ -1,6 +1,7 @@
 import { describe, expect, test, beforeAll, afterAll } from "vitest";
 import type { Server } from "node:http";
 import { db } from "./db";
+import { DEFAULT_OLLAMA_MODEL } from "./ai-backend";
 import { addFeed, listFeeds } from "./feed";
 import { addArticle, listArticles, updateArticleCuration, getArticleById, saveBriefing } from "./article";
 import { startServer } from "./server";
@@ -14,6 +15,7 @@ describe("server endpoints", () => {
     db.exec("DELETE FROM articles");
     db.exec("DELETE FROM feeds");
     db.exec("DELETE FROM briefings");
+    db.exec("DELETE FROM settings");
 
     addFeed("https://srv-test.com/feed.xml", "Srv Feed", "Tech");
     const feedId = listFeeds()[0].id;
@@ -161,6 +163,47 @@ describe("server endpoints", () => {
 
     afterAll(() => {
       db.exec("DELETE FROM briefings");
+    });
+  });
+
+  // ─── GET/POST /api/config/ai-backend ───
+
+  describe("AI backend config", () => {
+    test("returns default AI backend config when nothing is saved", async () => {
+      db.exec("DELETE FROM settings");
+
+      const res = await fetch(`${baseUrl}/api/config/ai-backend`);
+      const data = (await res.json()) as any;
+
+      expect(res.status).toBe(200);
+      expect(data).toEqual({ backend: "claude", model: DEFAULT_OLLAMA_MODEL });
+    });
+
+    test("updates AI backend config", async () => {
+      const res = await fetch(`${baseUrl}/api/config/ai-backend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backend: "ollama", model: "llama3.2:latest" }),
+      });
+      const data = (await res.json()) as any;
+
+      expect(res.status).toBe(200);
+      expect(data).toEqual({ ok: true, backend: "ollama", model: "llama3.2:latest" });
+
+      const verifyRes = await fetch(`${baseUrl}/api/config/ai-backend`);
+      const verifyData = (await verifyRes.json()) as any;
+      expect(verifyData).toEqual({ backend: "ollama", model: "llama3.2:latest" });
+    });
+
+    test("rejects unsupported AI backend values", async () => {
+      const res = await fetch(`${baseUrl}/api/config/ai-backend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ backend: "unknown" }),
+      });
+
+      expect(res.status).toBe(400);
+      expect((await res.json()) as any).toEqual({ error: "backend must be one of: claude, ollama" });
     });
   });
 

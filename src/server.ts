@@ -10,6 +10,7 @@ import { getConfig, setConfig, getAutoArchiveDays, runAutoArchive } from "./conf
 import { isPreferenceMemoStale } from "./preferences";
 import { aiDiscoverFeeds, aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
 import { addFeed, fetchAllFeeds, listFeeds, removeFeed } from "./feed";
+import { DEFAULT_AI_BACKEND, DEFAULT_OLLAMA_MODEL, AI_BACKENDS, isAiBackend } from "./ai-backend";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -317,6 +318,31 @@ export function startServer(port: number = 3000): import("http").Server {
         return;
       }
 
+      // GET /api/config/ai-backend — get AI backend config
+      if (url.pathname === "/api/config/ai-backend" && method === "GET") {
+        const backend = getConfig("ai_backend") ?? DEFAULT_AI_BACKEND;
+        const model = getConfig("ollama_model") ?? DEFAULT_OLLAMA_MODEL;
+        jsonResponse(res, { backend, model });
+        return;
+      }
+
+      // POST /api/config/ai-backend — set AI backend config
+      if (url.pathname === "/api/config/ai-backend" && method === "POST") {
+        const body = await parseJsonBody(req, res);
+        if (body === null) return;
+        const { backend, model } = body as { backend: unknown; model: unknown };
+        if (!isAiBackend(backend)) {
+          jsonResponse(res, { error: `backend must be one of: ${AI_BACKENDS.join(", ")}` }, 400);
+          return;
+        }
+        setConfig("ai_backend", backend);
+        if (typeof model === "string" && model.trim()) {
+          setConfig("ollama_model", model.trim());
+        }
+        jsonResponse(res, { ok: true, backend, model: getConfig("ollama_model") ?? DEFAULT_OLLAMA_MODEL });
+        return;
+      }
+
       // DELETE /api/feeds/:id — remove a feed
       const feedDeleteMatch = url.pathname.match(/^\/api\/feeds\/(\d+)$/);
       if (feedDeleteMatch && method === "DELETE") {
@@ -343,7 +369,9 @@ export function startServer(port: number = 3000): import("http").Server {
         const language = getConfig("language");
         const allFeeds = view === "feeds" ? listFeeds() : undefined;
         const autoUpdateHours = parseInt(getConfig("auto_update_hours") ?? "", 10) || DEFAULT_AUTO_UPDATE_HOURS;
-        const html = renderPage(articles, stats, sort, effectiveView, briefing, language, allFeeds, autoUpdateHours);
+        const aiBackend = getConfig("ai_backend") ?? DEFAULT_AI_BACKEND;
+        const ollamaModel = getConfig("ollama_model") ?? DEFAULT_OLLAMA_MODEL;
+        const html = renderPage(articles, stats, sort, effectiveView, briefing, language, allFeeds, autoUpdateHours, aiBackend, ollamaModel);
         res.writeHead(200, {
           "Content-Type": "text/html; charset=utf-8",
           "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'",

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { DEFAULT_OLLAMA_MODEL } from "../ai-backend";
 import { getTier, escapeHtml, formatDate, getAllCategories, getAllTags, renderPage } from "./html";
 import type { Article } from "../types";
 
@@ -218,5 +219,19 @@ describe("renderPage", () => {
     const html = renderPage(articles, stats);
     expect(html).toContain("Must Read");
     expect(html).not.toContain('"low-priority"');
+  });
+
+  test("renders AI backend controls with the selected backend and escaped model name", () => {
+    const html = renderPage([], stats, "newest", "all", null, null, [], 6, "ollama", 'gemma"test');
+
+    expect(html).toContain('id="ai-backend"');
+    expect(html).toContain('<option value="ollama" selected>Ollama</option>');
+    expect(html).toContain(`value="gemma&quot;test"`);
+  });
+
+  test("uses the default Ollama model when no custom model is provided", () => {
+    const html = renderPage([], stats, "newest", "all", null, null, [], 6, "ollama");
+
+    expect(html).toContain(`value="${DEFAULT_OLLAMA_MODEL}"`);
   });
 });

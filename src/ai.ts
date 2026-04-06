@@ -5,6 +5,7 @@ import { getConfig } from "./config";
 import { getRecentActions, savePreferenceMemo } from "./preferences";
 import { generateProfile, profileForPrompt } from "./profile";
 import { normalizeTags } from "./tag";
+import { DEFAULT_AI_BACKEND, DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL } from "./ai-backend";
 
 function extractJson(response: string, type: "array" | "object"): string | null {
   const pattern = type === "array" ? /\[[\s\S]*\]/ : /\{[\s\S]*\}/;
@@ -33,17 +34,34 @@ function findClaude(): string {
 
 const CLAUDE_PATH = findClaude();
 
+/** Build environment for Claude CLI. When backend is "ollama", route via Ollama's Anthropic-compatible API. */
+function buildClaudeEnv(): NodeJS.ProcessEnv {
+  const backend = getConfig("ai_backend") ?? DEFAULT_AI_BACKEND;
+  if (backend === "ollama") {
+    const ollamaUrl = getConfig("ollama_url") ?? DEFAULT_OLLAMA_URL;
+    const model = getConfig("ollama_model") ?? DEFAULT_OLLAMA_MODEL;
+    return {
+      ...process.env,
+      ANTHROPIC_BASE_URL: `${ollamaUrl}/v1`,
+      ANTHROPIC_API_KEY: "",
+      ANTHROPIC_MODEL: model,
+    };
+  }
+  return { ...process.env };
+}
+
 function callClaude(prompt: string, opts?: { allowedTools?: string[] }): Promise<string | null> {
   const useStdin = opts?.allowedTools?.length;
   const args = ["-p", "--output-format", "json"];
   if (useStdin) {
-    // variadic --allowedTools consumes remaining args, so pass prompt via stdin
-    args.push("--allowedTools", ...opts.allowedTools);
+    args.push("--allowedTools", ...opts.allowedTools!);
   } else {
     args.push(prompt);
   }
+  // allowedTools (WebSearch etc.) requires Claude CLI natively — skip Ollama env
+  const env = useStdin ? { ...process.env } : buildClaudeEnv();
   return new Promise((resolve) => {
-    const proc = spawn(CLAUDE_PATH, args);
+    const proc = spawn(CLAUDE_PATH, args, { env });
     if (useStdin) {
       proc.stdin?.write(prompt);
       proc.stdin?.end();
@@ -70,7 +88,6 @@ function callClaude(prompt: string, opts?: { allowedTools?: string[] }): Promise
         }
         resolve((json.result as string)?.trim() ?? null);
       } catch {
-        // Fallback: treat stdout as plain text (older CLI versions)
         resolve(stdout.trim());
       }
     });

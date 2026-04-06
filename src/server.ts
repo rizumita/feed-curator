@@ -73,6 +73,14 @@ function loadAsset(filePath: string, embeddedKey?: string): string {
 
 const DEFAULT_AUTO_UPDATE_HOURS = 6;
 
+function getAutoUpdateHours(): number {
+  const raw = getConfig("auto_update_hours");
+  if (raw === null || raw.trim() === "") return DEFAULT_AUTO_UPDATE_HOURS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 168) return DEFAULT_AUTO_UPDATE_HOURS;
+  return parsed;
+}
+
 async function runFullUpdate(onProgress?: (msg: string) => void): Promise<{ newArticles: number; curated: number; briefing: boolean }> {
   const send = onProgress ?? (() => {});
   send("Fetching feeds...");
@@ -114,6 +122,45 @@ function broadcastEvent(event: string, data: unknown): void {
 export function startServer(port: number = 3000): import("http").Server {
   const stylesPath = join(__dirname, "web", "styles.css");
   const scriptsPath = join(__dirname, "web", "scripts.js");
+  let autoUpdateTimer: ReturnType<typeof setInterval> | null = null;
+  let autoUpdateRunning = false;
+
+  const clearAutoUpdateSchedule = (): void => {
+    if (!autoUpdateTimer) return;
+    clearInterval(autoUpdateTimer);
+    autoUpdateTimer = null;
+  };
+
+  const applyAutoUpdateSchedule = (): void => {
+    clearAutoUpdateSchedule();
+
+    const autoUpdateHours = getAutoUpdateHours();
+    if (autoUpdateHours <= 0) {
+      console.log("Auto-update disabled");
+      return;
+    }
+
+    const intervalMs = autoUpdateHours * 60 * 60 * 1000;
+    console.log(`Auto-update enabled: every ${autoUpdateHours} hour(s)`);
+    autoUpdateTimer = setInterval(async () => {
+      if (autoUpdateRunning) {
+        console.log("[auto-update] Skipping because the previous update is still running.");
+        return;
+      }
+
+      autoUpdateRunning = true;
+      console.log("[auto-update] Starting scheduled update...");
+      try {
+        const result = await runFullUpdate((msg) => console.log(`[auto-update] ${msg}`));
+        console.log(`[auto-update] Done: ${result.newArticles} new, ${result.curated} curated`);
+        broadcastEvent("auto-update-done", result);
+      } catch (e) {
+        console.error("[auto-update] Failed:", e);
+      } finally {
+        autoUpdateRunning = false;
+      }
+    }, intervalMs);
+  };
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
@@ -304,12 +351,12 @@ export function startServer(port: number = 3000): import("http").Server {
 
       // GET /api/config/auto-update — get auto-update interval
       if (url.pathname === "/api/config/auto-update" && method === "GET") {
-        const hours = parseInt(getConfig("auto_update_hours") ?? "", 10) || DEFAULT_AUTO_UPDATE_HOURS;
+        const hours = getAutoUpdateHours();
         jsonResponse(res, { hours });
         return;
       }
 
-      // POST /api/config/auto-update — set auto-update interval (requires restart)
+      // POST /api/config/auto-update — set auto-update interval
       if (url.pathname === "/api/config/auto-update" && method === "POST") {
         const body = await parseJsonBody(req, res);
         if (body === null) return;
@@ -319,7 +366,8 @@ export function startServer(port: number = 3000): import("http").Server {
           return;
         }
         setConfig("auto_update_hours", String(hours));
-        jsonResponse(res, { ok: true, hours, note: "Restart to apply" });
+        applyAutoUpdateSchedule();
+        jsonResponse(res, { ok: true, hours, note: "Applied immediately" });
         return;
       }
 
@@ -373,7 +421,7 @@ export function startServer(port: number = 3000): import("http").Server {
         const effectiveView = (view === "briefing" && !briefing) ? "all" : view;
         const language = getConfig("language");
         const allFeeds = view === "feeds" ? listFeeds() : undefined;
-        const autoUpdateHours = parseInt(getConfig("auto_update_hours") ?? "", 10) || DEFAULT_AUTO_UPDATE_HOURS;
+        const autoUpdateHours = getAutoUpdateHours();
         const aiBackend = getConfig("ai_backend") ?? DEFAULT_AI_BACKEND;
         const ollamaModel = getConfig("ollama_model") ?? DEFAULT_OLLAMA_MODEL;
         const html = renderPage(articles, stats, sort, effectiveView, briefing, language, allFeeds, autoUpdateHours, aiBackend, ollamaModel);
@@ -413,22 +461,8 @@ export function startServer(port: number = 3000): import("http").Server {
     console.log(`Feed Curator running at http://localhost:${port}`);
   });
 
-  // Auto-update timer
-  const autoUpdateHours = parseInt(getConfig("auto_update_hours") ?? "", 10) || DEFAULT_AUTO_UPDATE_HOURS;
-  if (autoUpdateHours > 0) {
-    const intervalMs = autoUpdateHours * 60 * 60 * 1000;
-    console.log(`Auto-update enabled: every ${autoUpdateHours} hour(s)`);
-    setInterval(async () => {
-      console.log(`[auto-update] Starting scheduled update...`);
-      try {
-        const result = await runFullUpdate((msg) => console.log(`[auto-update] ${msg}`));
-        console.log(`[auto-update] Done: ${result.newArticles} new, ${result.curated} curated`);
-        broadcastEvent("auto-update-done", result);
-      } catch (e) {
-        console.error(`[auto-update] Failed:`, e);
-      }
-    }, intervalMs);
-  }
+  applyAutoUpdateSchedule();
+  server.on("close", clearAutoUpdateSchedule);
 
   return server;
 }

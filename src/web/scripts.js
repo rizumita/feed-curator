@@ -593,11 +593,25 @@ async function setOllamaModel(model) {
 }
 
 async function setAutoUpdate(hours) {
-  await fetch('/api/config/auto-update', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({hours: Number(hours)})
-  });
+  var status = document.getElementById('action-status');
+
+  try {
+    var res = await fetch('/api/config/auto-update', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({hours: Number(hours)})
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to update auto-update setting.');
+
+    status.textContent = data.hours === 0
+      ? 'Auto update disabled.'
+      : 'Auto update set to every ' + data.hours + ' hour(s).';
+    status.className = 'action-status done';
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+    status.className = 'action-status error';
+  }
 }
 
 // Request notification permission on page load

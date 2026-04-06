@@ -1,10 +1,11 @@
-import { describe, expect, test, beforeAll, afterAll } from "vitest";
+import { describe, expect, test, beforeAll, afterAll, afterEach, vi } from "vitest";
 import type { Server } from "node:http";
 import { db } from "./db";
 import { DEFAULT_OLLAMA_MODEL } from "./ai-backend";
 import { addFeed, listFeeds } from "./feed";
 import { addArticle, listArticles, updateArticleCuration, getArticleById, saveBriefing } from "./article";
 import { startServer } from "./server";
+import { setConfig } from "./config";
 
 describe("server endpoints", () => {
   let baseUrl: string;
@@ -179,6 +180,61 @@ describe("server endpoints", () => {
         feeds: 1,
         archived: 0,
       });
+    });
+  });
+
+  describe("auto-update config", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      db.exec("DELETE FROM settings");
+    });
+
+    test("returns 0 hours when auto-update is disabled", async () => {
+      setConfig("auto_update_hours", "0");
+
+      const configRes = await fetch(`${baseUrl}/api/config/auto-update`);
+      expect(configRes.status).toBe(200);
+      expect((await configRes.json()) as any).toEqual({ hours: 0 });
+
+      const pageRes = await fetch(`${baseUrl}/`);
+      const html = await pageRes.text();
+      expect(html).toContain('<option value="0" selected>Off</option>');
+    });
+
+    test("applies auto-update changes immediately without restart", async () => {
+      setConfig("auto_update_hours", "6");
+
+      const setIntervalSpy = vi.spyOn(global, "setInterval");
+      const clearIntervalSpy = vi.spyOn(global, "clearInterval");
+
+      const localServer = startServer(0);
+      await new Promise<void>((resolve) => {
+        localServer.once("listening", resolve);
+      });
+      const addr = localServer.address() as { port: number };
+      const localBaseUrl = `http://localhost:${addr.port}`;
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 6 * 60 * 60 * 1000);
+
+      setIntervalSpy.mockClear();
+      clearIntervalSpy.mockClear();
+
+      const res = await fetch(`${localBaseUrl}/api/config/auto-update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hours: 3 }),
+      });
+      const data = (await res.json()) as any;
+
+      expect(res.status).toBe(200);
+      expect(data).toEqual({ ok: true, hours: 3, note: "Applied immediately" });
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 3 * 60 * 60 * 1000);
+
+      const verifyRes = await fetch(`${localBaseUrl}/api/config/auto-update`);
+      expect((await verifyRes.json()) as any).toEqual({ hours: 3 });
+
+      localServer.close();
     });
   });
 

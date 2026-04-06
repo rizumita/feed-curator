@@ -152,6 +152,11 @@ export function startServer(port: number = 3000): import("http").Server {
         return;
       }
 
+      if (url.pathname === "/api/stats") {
+        jsonResponse(res, getStats());
+        return;
+      }
+
       const readMatch = url.pathname.match(/^\/api\/read\/(\d+)$/);
       if (readMatch && method === "POST") {
         const found = toggleRead(Number(readMatch[1]));

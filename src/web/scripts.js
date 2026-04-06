@@ -44,6 +44,49 @@ function updateUnreadCount() {
   document.getElementById('unread-count').textContent = unread;
 }
 
+function setCountText(id, value) {
+  var element = document.getElementById(id);
+  if (element) element.textContent = String(value);
+}
+
+async function refreshSidebarStats() {
+  try {
+    var res = await fetch('/api/stats');
+    if (!res.ok) return;
+    var stats = await res.json();
+    setCountText('unread-count', stats.unread);
+    setCountText('curated-count', stats.curated);
+    setCountText('pending-count', stats.total - stats.curated);
+    setCountText('feeds-count', stats.feeds);
+    setCountText('archived-count', stats.archived);
+  } catch (_error) {
+    // Leave the current values in place if the refresh request fails.
+  }
+}
+
+function renderEmptyFeedsState() {
+  return '<div class="empty"><h2>No feeds registered</h2><p>Use the search box in the sidebar to discover and add feeds.</p></div>';
+}
+
+function updateFeedsViewAfterRemoval() {
+  var feedsView = document.getElementById('feeds-view');
+  if (!feedsView) return;
+
+  document.querySelectorAll('.feeds-category').forEach(function(section) {
+    var count = section.querySelectorAll('.feed-card').length;
+    var countEl = section.querySelector('[data-category-count]');
+    if (countEl) countEl.textContent = String(count);
+    if (count === 0) section.remove();
+  });
+
+  var total = document.querySelectorAll('.feed-card').length;
+  setCountText('feeds-total-count', total);
+
+  if (total === 0) {
+    feedsView.innerHTML = renderEmptyFeedsState();
+  }
+}
+
 function updateTocCounts() {
   document.querySelectorAll('.toc-link').forEach(function(link) {
     var href = link.getAttribute('href');
@@ -262,9 +305,14 @@ function setSort(sort) {
 // --- Feed management ---
 async function removeFeed(id) {
   if (!confirm('Remove this feed and all its articles?')) return;
-  await fetch('/api/feeds/' + id, { method: 'DELETE' });
+  var res = await fetch('/api/feeds/' + id, { method: 'DELETE' });
+  if (!res.ok) return;
   var card = document.querySelector('[data-feed-id="' + id + '"]');
-  if (card) card.remove();
+  if (card) {
+    card.remove();
+    updateFeedsViewAfterRemoval();
+  }
+  await refreshSidebarStats();
 }
 
 // --- Language setting ---

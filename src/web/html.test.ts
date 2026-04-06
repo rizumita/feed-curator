@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { DEFAULT_OLLAMA_MODEL } from "../ai-backend";
 import { getTier, escapeHtml, formatDate, getAllCategories, getAllTags, renderPage } from "./html";
-import type { Article } from "../types";
+import type { Article, Feed } from "../types";
 
 type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
 
@@ -23,6 +23,18 @@ function makeArticle(overrides: Partial<ArticleWithFeed> = {}): ArticleWithFeed 
     archived_at: null,
     feed_title: "Test Feed",
     category: "Tech",
+    ...overrides,
+  };
+}
+
+function makeFeed(overrides: Partial<Feed> = {}): Feed {
+  return {
+    id: 1,
+    url: "https://example.com/feed.xml",
+    title: "Example Feed",
+    last_fetched_at: null,
+    category: "Tech",
+    created_at: "2024-01-15T00:00:00Z",
     ...overrides,
   };
 }
@@ -233,5 +245,17 @@ describe("renderPage", () => {
     const html = renderPage([], stats, "newest", "all", null, null, [], 6, "ollama");
 
     expect(html).toContain(`value="${DEFAULT_OLLAMA_MODEL}"`);
+  });
+
+  test("renders feed view with identifiers needed for live count updates", () => {
+    const html = renderPage([], stats, "newest", "feeds", null, null, [
+      makeFeed(),
+      makeFeed({ id: 2, url: "https://second.example.com/feed.xml", title: "Second Feed" }),
+    ]);
+
+    expect(html).toContain('id="feeds-count"');
+    expect(html).toContain('id="feeds-total-count"');
+    expect(html).toContain('data-category-count');
+    expect(html).toContain('id="feeds-view"');
   });
 });

@@ -166,6 +166,22 @@ describe("server endpoints", () => {
     });
   });
 
+  describe("GET /api/stats", () => {
+    test("returns the latest sidebar stats", async () => {
+      const res = await fetch(`${baseUrl}/api/stats`);
+      const data = (await res.json()) as any;
+
+      expect(res.status).toBe(200);
+      expect(data).toEqual({
+        total: 3,
+        curated: 3,
+        unread: 3,
+        feeds: 1,
+        archived: 0,
+      });
+    });
+  });
+
   // ─── GET/POST /api/config/ai-backend ───
 
   describe("AI backend config", () => {

@@ -114,10 +114,10 @@ function renderCard(a: ArticleWithFeed, view: "active" | "archive" = "active"): 
 
 function renderFeedsView(feeds: Feed[]): string {
   if (feeds.length === 0) {
-    return `<div class="empty">
+    return `<div id="feeds-view"><div class="empty">
       <h2>No feeds registered</h2>
       <p>Use the search box in the sidebar to discover and add feeds.</p>
-    </div>`;
+    </div></div>`;
   }
 
   const byCategory = new Map<string, Feed[]>();
@@ -128,10 +128,10 @@ function renderFeedsView(feeds: Feed[]): string {
     byCategory.set(cat, list);
   }
 
-  return `<h1 class="feeds-title">Registered Feeds <span class="feeds-count">${feeds.length}</span></h1>
+  return `<div id="feeds-view"><h1 class="feeds-title">Registered Feeds <span class="feeds-count" id="feeds-total-count">${feeds.length}</span></h1>
     ${[...byCategory.entries()].map(([cat, catFeeds]) => `
-      <section class="feeds-category">
-        <h2 class="feeds-category-name">${escapeHtml(cat)} <span class="feeds-count">${catFeeds.length}</span></h2>
+      <section class="feeds-category" data-category-name="${escapeHtml(cat)}">
+        <h2 class="feeds-category-name">${escapeHtml(cat)} <span class="feeds-count" data-category-count>${catFeeds.length}</span></h2>
         ${catFeeds.map(f => `
           <div class="feed-card" data-feed-id="${f.id}">
             <div class="feed-card-info">
@@ -143,7 +143,7 @@ function renderFeedsView(feeds: Feed[]): string {
           </div>
         `).join("\n")}
       </section>
-    `).join("\n")}`;
+    `).join("\n")}</div>`;
 }
 
 interface Stats {
@@ -298,19 +298,19 @@ export function renderPage(
           <div class="stat-lbl">Unread</div>
         </div>
         <div class="stat-box">
-          <div class="stat-val">${stats.curated}</div>
+          <div class="stat-val" id="curated-count">${stats.curated}</div>
           <div class="stat-lbl">Curated</div>
         </div>
         <div class="stat-box">
-          <div class="stat-val">${stats.total - stats.curated}</div>
+          <div class="stat-val" id="pending-count">${stats.total - stats.curated}</div>
           <div class="stat-lbl">Pending</div>
         </div>
         <div class="stat-box">
-          <div class="stat-val">${stats.feeds}</div>
+          <div class="stat-val" id="feeds-count">${stats.feeds}</div>
           <div class="stat-lbl">Feeds</div>
         </div>
         <div class="stat-box">
-          <div class="stat-val">${stats.archived}</div>
+          <div class="stat-val" id="archived-count">${stats.archived}</div>
           <div class="stat-lbl">Archived</div>
         </div>
       </div>

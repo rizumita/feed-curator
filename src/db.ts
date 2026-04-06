@@ -15,6 +15,9 @@ function createBunDb() {
   const { Database } = require("bun:sqlite");
   const bunDb = new Database(DB_PATH, { create: true });
 
+  // Checkpoint WAL to consolidate any pending writes from sql.js sessions
+  try { bunDb.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch {}
+
   class BunCompatDatabase {
     prepare(sql: string) {
       return {

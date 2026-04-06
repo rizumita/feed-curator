@@ -1,6 +1,6 @@
 [package]
 name = "feed-curator-desktop"
-version = "0.7.0"
+version = "0.7.1"
 description = "Feed Curator Desktop — AI-powered RSS briefings"
 authors = ["Ryoichi Izumita <r.izumita@caph.jp>"]
 license = "MIT"

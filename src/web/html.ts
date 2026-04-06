@@ -27,11 +27,29 @@ export function getTier(score: number): Tier {
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
   try {
-    const d = new Date(dateStr);
+    const d = parseDisplayDate(dateStr);
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch {
     return dateStr;
   }
+}
+
+export function formatTime(dateStr: string | null): string {
+  if (!dateStr) return "";
+  try {
+    const d = parseDisplayDate(dateStr);
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return dateStr;
+  }
+}
+
+function parseDisplayDate(dateStr: string): Date {
+  // SQLite datetime('now') stores UTC without a timezone suffix.
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(dateStr)) {
+    return new Date(dateStr.replace(" ", "T") + "Z");
+  }
+  return new Date(dateStr);
 }
 
 export function escapeHtml(str: string): string {
@@ -208,9 +226,13 @@ function renderMainContent(opts: {
   }
   if (view === "feeds") return renderFeedsView(feeds);
   if (view === "briefing" && briefing) {
+    const updatedTime = formatTime(briefing.created_at);
     return `<div class="briefing-header">
       <h1>Today's Briefing</h1>
-      <span class="briefing-date">${now}</span>
+      <div class="briefing-meta">
+        <span class="briefing-date">${now}</span>
+        ${updatedTime ? `<span class="briefing-updated">Updated ${updatedTime}</span>` : ""}
+      </div>
     </div>
     ${renderBriefingView(briefing, articles)}
     <div class="briefing-footer">
@@ -361,6 +383,7 @@ export function renderPage(
           <button class="filter-btn" data-value="unread" onclick="filterArticles('unread')">Unread only</button>
           <button class="filter-btn" data-value="read" onclick="filterArticles('read')">Read only</button>
         </div>
+        ${view !== "briefing" ? `
         <div class="period-filter" style="margin-top:0.5rem">
           <select id="period-filter" onchange="filterByPeriod(this.value)">
             <option value="all">All time</option>
@@ -372,7 +395,7 @@ export function renderPage(
             <option value="90">3 months</option>
             <option value="180">6 months</option>
           </select>
-        </div>
+        </div>` : ""}
       </div>
 
       ${allTags.length > 0 ? `

@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { getLocalDateKey, getUtcDateKey } from "./date";
 import type { Briefing, BriefingCluster } from "./types";
 
 export function saveBriefing(date: string, clusters: BriefingCluster[]): void {
@@ -14,6 +15,14 @@ export function getBriefing(date: string): Briefing | null {
 }
 
 export function getTodayBriefing(): Briefing | null {
-  const today = new Date().toISOString().slice(0, 10);
-  return getBriefing(today);
+  const today = getLocalDateKey();
+  const briefing = getBriefing(today);
+  if (briefing) return briefing;
+
+  const legacyUtcDate = getUtcDateKey();
+  if (legacyUtcDate !== today) {
+    return getBriefing(legacyUtcDate);
+  }
+
+  return null;
 }

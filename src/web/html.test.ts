@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { DEFAULT_OLLAMA_MODEL } from "../ai-backend";
-import { getTier, escapeHtml, formatDate, getAllCategories, getAllTags, renderPage } from "./html";
-import type { Article, Feed } from "../types";
+import { getTier, escapeHtml, formatDate, formatTime, getAllCategories, getAllTags, renderPage } from "./html";
+import type { Article, Briefing, Feed } from "../types";
 
 type ArticleWithFeed = Article & { feed_title: string | null; category: string | null };
 
@@ -133,6 +133,22 @@ describe("formatDate", () => {
   });
 });
 
+describe("formatTime", () => {
+  test("formats ISO date to time", () => {
+    const result = formatTime("2024-01-15T17:02:00");
+    expect(result).toBe("5:02 PM");
+  });
+
+  test("formats SQLite UTC timestamps as local time", () => {
+    const result = formatTime("2026-04-06 22:44:52");
+    expect(result).toBe("7:44 AM");
+  });
+
+  test("returns empty for null", () => {
+    expect(formatTime(null)).toBe("");
+  });
+});
+
 // ─── getAllCategories ───
 
 describe("getAllCategories", () => {
@@ -193,6 +209,12 @@ describe("getAllTags", () => {
 
 describe("renderPage", () => {
   const stats = { total: 10, curated: 5, unread: 3, feeds: 2, archived: 0 };
+  const briefing: Briefing = {
+    id: 1,
+    date: "2024-01-15",
+    clusters: JSON.stringify([{ topic: "AI", summary: "Top stories", article_ids: [1] }]),
+    created_at: "2024-01-15T17:02:00",
+  };
 
   test("renders empty state message when no articles", () => {
     const html = renderPage([], stats);
@@ -257,5 +279,25 @@ describe("renderPage", () => {
     expect(html).toContain('id="feeds-total-count"');
     expect(html).toContain('data-category-count');
     expect(html).toContain('id="feeds-view"');
+  });
+
+  test("renders the briefing updated time in the header", () => {
+    const html = renderPage([makeArticle()], stats, "newest", "briefing", briefing);
+
+    expect(html).toContain("Today's Briefing");
+    expect(html).toContain("Updated 5:02 PM");
+  });
+
+  test("does not render the period filter on briefing view", () => {
+    const html = renderPage([makeArticle()], stats, "newest", "briefing", briefing);
+
+    expect(html).not.toContain('id="period-filter"');
+  });
+
+  test("renders the period filter on article list views", () => {
+    const html = renderPage([makeArticle()], stats, "newest", "all");
+
+    expect(html).toContain('id="period-filter"');
+    expect(html).toContain('<option value="7" selected>7 days</option>');
   });
 });

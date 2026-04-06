@@ -142,10 +142,17 @@ function updateURL() {
   history.replaceState(null, '', qs ? '?' + qs : location.pathname);
 }
 
-var currentPeriodDays = 7;
+function parsePeriodDays(value) {
+  if (!value || value === 'all') return 0;
+  var days = Number(value);
+  return Number.isFinite(days) && days > 0 ? days : 0;
+}
+
+var periodFilter = document.getElementById('period-filter');
+var currentPeriodDays = parsePeriodDays(periodFilter ? periodFilter.value : 'all');
 
 function filterByPeriod(days) {
-  currentPeriodDays = days === 'all' ? 0 : Number(days);
+  currentPeriodDays = parsePeriodDays(days);
   applyFilters();
 }
 

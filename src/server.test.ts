@@ -6,6 +6,7 @@ import { addFeed, listFeeds } from "./feed";
 import { addArticle, listArticles, updateArticleCuration, getArticleById, saveBriefing } from "./article";
 import { startServer } from "./server";
 import { setConfig } from "./config";
+import { getLocalDateKey } from "./date";
 
 describe("server endpoints", () => {
   let baseUrl: string;
@@ -155,7 +156,7 @@ describe("server endpoints", () => {
     });
 
     test("returns today's briefing when no date param", async () => {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getLocalDateKey();
       saveBriefing(today, [{ topic: "Today", summary: "News", article_ids: [articleIds[1]] }]);
       const res = await fetch(`${baseUrl}/api/briefing`);
       const data = (await res.json()) as any;

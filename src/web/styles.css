@@ -863,7 +863,19 @@ footer {
   margin: 0;
 }
 
+.briefing-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .briefing-date {
+  color: var(--text-dim);
+  font-size: 0.875rem;
+}
+
+.briefing-updated {
   color: var(--text-dim);
   font-size: 0.875rem;
 }

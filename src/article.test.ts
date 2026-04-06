@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll, beforeEach } from "vitest";
+import { describe, expect, test, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { db } from "./db";
 import { addFeed, listFeeds } from "./feed";
 import {
@@ -26,6 +26,7 @@ import {
   getRecentActions,
 } from "./article";
 import type { BriefingCluster } from "./types";
+import { getLocalDateKey, getUtcDateKey } from "./date";
 
 // ─── Setup ───
 
@@ -369,22 +370,41 @@ describe("getTodayBriefing", () => {
     db.exec("DELETE FROM briefings");
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   test("returns null when no briefing exists for today", () => {
     expect(getTodayBriefing()).toBeNull();
   });
 
   test("returns today's briefing when it exists", () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateKey();
     saveBriefing(today, [{ topic: "Today", summary: "News", article_ids: [1] }]);
     const briefing = getTodayBriefing();
     expect(briefing).not.toBeNull();
     expect(briefing!.date).toBe(today);
   });
 
-  test("does not return yesterday's briefing", () => {
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    saveBriefing(yesterday, [{ topic: "Yesterday", summary: "Old", article_ids: [] }]);
+  test("does not return an older briefing when today has no matching entry", () => {
+    const olderDate = new Date();
+    olderDate.setDate(olderDate.getDate() - 2);
+    const older = getLocalDateKey(olderDate);
+    saveBriefing(older, [{ topic: "Older", summary: "Old", article_ids: [] }]);
     expect(getTodayBriefing()).toBeNull();
+  });
+
+  test("falls back to legacy UTC date keys for existing briefings", () => {
+    vi.useFakeTimers();
+    const now = new Date("2026-04-07T00:30:00+09:00");
+    vi.setSystemTime(now);
+
+    const legacyUtcDate = getUtcDateKey(now);
+    saveBriefing(legacyUtcDate, [{ topic: "Legacy", summary: "Saved before timezone fix", article_ids: [1] }]);
+
+    const briefing = getTodayBriefing();
+    expect(briefing).not.toBeNull();
+    expect(briefing!.date).toBe(legacyUtcDate);
   });
 });
 

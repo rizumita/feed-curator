@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import { listArticles, updateArticleCuration } from "./article";
 import { saveBriefing } from "./briefing-data";
+import { getLocalDateKey } from "./date";
 import { getConfig } from "./config";
 import { getRecentActions, savePreferenceMemo } from "./preferences";
 import { generateProfile, profileForPrompt } from "./profile";
@@ -438,7 +439,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
       return false;
     }
     const data = JSON.parse(json) as { clusters: Array<{ topic: string; summary: string; article_ids: number[] }> };
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateKey();
     saveBriefing(today, data.clusters);
     const msg = `Briefing saved: ${data.clusters.length} topic(s), ${data.clusters.reduce((n, c) => n + c.article_ids.length, 0)} articles.`;
     console.log(msg);

@@ -13,6 +13,7 @@ import { aiCurate, aiBriefing, aiGenerateMemo } from "./ai";
 import { generateDigestMarkdown } from "./digest";
 import { runEvaluation, compareReports } from "./eval";
 import type { EvalReport } from "./eval";
+import { getLocalDateKey } from "./date";
 
 const program = new Command();
 program.name("feed-curator").description("AI-powered RSS feed curation tool");
@@ -287,12 +288,12 @@ program
   .action((opts: { save?: string; date?: string }) => {
     if (opts.save) {
       const data = JSON.parse(opts.save);
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getLocalDateKey();
       saveBriefing(today, data.clusters);
       console.log(`Briefing saved for ${today} with ${data.clusters.length} topic(s).`);
       return;
     }
-    const date = opts.date ?? new Date().toISOString().slice(0, 10);
+    const date = opts.date ?? getLocalDateKey();
     const briefing = getBriefing(date);
     if (!briefing) {
       console.log(`No briefing found for ${date}.`);
@@ -314,7 +315,7 @@ program
   .option("--date <date>", "Date (YYYY-MM-DD), defaults to today")
   .option("-o, --output <path>", "Output file path")
   .action((opts: { date?: string; output?: string }) => {
-    const date = opts.date ?? new Date().toISOString().slice(0, 10);
+    const date = opts.date ?? getLocalDateKey();
     const md = generateDigestMarkdown(date);
     if (!md) {
       console.error(`No briefing found for ${date}. Run 'feed-curator start' first.`);

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { db } from "./db";
@@ -38,13 +38,24 @@ export function removeFeed(feedId: number): void {
   db.prepare("DELETE FROM feeds WHERE id = ?").run(feedId);
 }
 
+export function getBundledStarterFeedPackCandidates(baseDir = dirname(fileURLToPath(import.meta.url))): string[] {
+  return [
+    resolve(baseDir, "../examples/starter-feeds.json"),
+    resolve(baseDir, "./examples/starter-feeds.json"),
+  ];
+}
+
+export function resolveBundledStarterFeedPackPath(baseDir = dirname(fileURLToPath(import.meta.url))): string {
+  const candidates = getBundledStarterFeedPackCandidates(baseDir);
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
+
 export function loadStarterFeeds(customPath?: string): number {
   let filePath: string;
   if (customPath) {
     filePath = resolve(customPath);
   } else {
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    filePath = resolve(__dirname, "../examples/starter-feeds.json");
+    filePath = resolveBundledStarterFeedPackPath();
   }
 
   let json: { feeds: Array<{ url: string; category?: string }> };

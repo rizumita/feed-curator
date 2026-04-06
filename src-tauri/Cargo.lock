@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "feed-curator-desktop"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "log",
  "open",

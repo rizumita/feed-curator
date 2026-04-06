@@ -1,6 +1,6 @@
 {
   "name": "feed-curator",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Personalized RSS briefings for developers, powered by Claude Code. No API keys needed.",
   "author": "Ryoichi Izumita <r.izumita@caph.jp>",
   "license": "MIT",
@@ -20,7 +20,10 @@
     "feed-curator": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist/cli.js",
+    "dist/web/styles.css",
+    "dist/web/scripts.js",
+    "dist/examples/starter-feeds.json"
   ],
   "scripts": {
     "build": "tsup",
